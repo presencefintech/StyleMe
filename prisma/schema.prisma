@@ -1,0 +1,148 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum JobType {
+  ENHANCE
+  PHOTOSHOOT
+}
+
+enum JobStatus {
+  PENDING
+  PROCESSING
+  DONE
+  REJECTED
+  FAILED
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+}
+
+enum AssetKind {
+  SOURCE
+  RESULT
+  SELFIE_TRAINING
+}
+
+enum StyleKind {
+  OCCASION
+  TEMPLATE
+}
+
+model User {
+  id             String              @id
+  email          String              @unique
+  passwordHash   String
+  ageConfirmedAt DateTime?
+  createdAt      DateTime            @default(now())
+  assets         Asset[]
+  jobs           Job[]
+  payments       Payment[]
+  ledger         CreditTransaction[]
+}
+
+model Asset {
+  id        String    @id
+  userId    String
+  user      User      @relation(fields: [userId], references: [id])
+  kind      AssetKind
+  bucket    String
+  key       String
+  createdAt DateTime  @default(now())
+  deletedAt DateTime?
+
+  @@unique([bucket, key])
+  @@index([userId])
+}
+
+model StyleTemplate {
+  id         String    @id
+  name       String
+  kind       StyleKind
+  creditCost Int
+  previewUrl String?
+  active     Boolean   @default(true)
+  jobs       Job[]
+}
+
+model Job {
+  id             String         @id
+  userId         String
+  user           User           @relation(fields: [userId], references: [id])
+  type           JobType
+  styleId        String?
+  style          StyleTemplate? @relation(fields: [styleId], references: [id])
+  creditCost     Int
+  status         JobStatus
+  inputAssetIds  String[]
+  outputAssetIds String[]
+  errorReason    String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  moderationLogs ModerationLog[]
+
+  @@index([userId, createdAt])
+}
+
+/// Append-only : jamais d'UPDATE/DELETE. Solde = SUM(amount).
+model CreditTransaction {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  amount    Int
+  reason    String
+  paymentId String?  @unique
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model Payment {
+  id          String        @id
+  userId      String
+  user        User          @relation(fields: [userId], references: [id])
+  packId      String
+  credits     Int
+  amount      Int
+  currency    String
+  phone       String
+  operator    String
+  providerRef String        @unique
+  status      PaymentStatus
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+}
+
+model ModerationLog {
+  id         String   @id @default(cuid())
+  jobId      String
+  job        Job      @relation(fields: [jobId], references: [id])
+  stage      String
+  approved   Boolean
+  nsfwScore  Float
+  minorRisk  Boolean
+  faceCount  Int
+  createdAt  DateTime @default(now())
+
+  @@index([jobId])
+}
+
+
+/// Réponses mémorisées pour l'en-tête Idempotency-Key (POST /jobs, /payments/initiate).
+model IdempotencyRecord {
+  key        String
+  userId     String
+  statusCode Int
+  body       Json
+  createdAt  DateTime @default(now())
+
+  @@id([userId, key])
+}

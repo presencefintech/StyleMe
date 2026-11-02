@@ -1,0 +1,30 @@
+{
+  "name": "styleme",
+  "private": true,
+  "packageManager": "pnpm@12.16.1",
+  "scripts": {
+    "typecheck": "tsc -p packages/shared/tsconfig.json && tsc -p apps/api/tsconfig.json && tsc -p apps/web/tsconfig.json",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "prisma:validate": "prisma validate",
+    "check": "npm run typecheck && npm run lint && npm run test && npm run prisma:validate",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "db:seed": "prisma db seed"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.0.0",
+    "@prisma/client": "^6.0.0",
+    "@supabase/supabase-js": "^2.118.0",
+    "@types/node": "^26.6.6",
+    "eslint": "^9.0.0",
+    "prisma": "^6.0.0",
+    "tsx": "^4.23.15",
+    "typescript": "^5.6.0",
+    "typescript-eslint": "^8.0.0",
+    "vitest": "^2.1.0"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  }
+}
