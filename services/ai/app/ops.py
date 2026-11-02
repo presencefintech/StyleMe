@@ -8,7 +8,7 @@ Pour la qualité de production, remplacer le corps de chaque fonction (la signat
 import logging
 from io import BytesIO
 
-from PIL import Image, ImageFilter, ImageOps, UnidentifiedImageError
+from PIL import Image, ImageColor, ImageFilter, ImageOps, UnidentifiedImageError
 
 log = logging.getLogger("styleme.ai")
 
@@ -53,15 +53,56 @@ def restore_face(img: Image.Image) -> Image.Image:
 
 
 _warned_no_rembg = False
+_rembg_session = None
 
 
 def remove_background(img: Image.Image) -> Image.Image:
-    global _warned_no_rembg
+    """Détourage réel avec rembg (modèle u2net, CPU). Le modèle est chargé une seule fois."""
+    global _warned_no_rembg, _rembg_session
     try:
-        from rembg import remove  # type: ignore[import-not-found]
+        from rembg import new_session, remove  # type: ignore[import-not-found]
     except ImportError:
         if not _warned_no_rembg:
             log.warning("rembg non installé : le fond n'est PAS retiré (image renvoyée telle quelle).")
             _warned_no_rembg = True
         return img
-    return remove(img)
+    if _rembg_session is None:
+        _rembg_session = new_session("u2net")
+    return remove(img, session=_rembg_session)
+
+
+# Fonds d'occasion : dégradé vertical (haut, bas). Les ids sont ceux de StyleTemplate (prisma/seed.ts).
+TEMPLATE_BACKGROUNDS: dict[str, tuple[str, str]] = {
+    "mariage": ("#FDF3F0", "#E8C4BC"),
+    "anniversaire": ("#FFD36E", "#FF6B6B"),
+    "bapteme": ("#E8F3FF", "#BFD9F2"),
+    "diplome": ("#1F3A68", "#0E1B38"),
+    "fetes": ("#0B3D2E", "#8B1E2D"),
+    "saint-valentin": ("#FF9EB5", "#C2185B"),
+    "pro-linkedin": ("#E9EEF5", "#AEB9CC"),
+    "cv": ("#F5F5F5", "#D9D9D9"),
+    "fond-studio": ("#CFCFCF", "#8F8F8F"),
+}
+
+
+class UnknownTemplate(ValueError):
+    """Identifiant de style inconnu."""
+
+
+def _gradient(size: tuple[int, int], top: str, bottom: str) -> Image.Image:
+    w, h = size
+    c1, c2 = ImageColor.getrgb(top), ImageColor.getrgb(bottom)
+    column = Image.new("RGB", (1, h))
+    column.putdata([tuple(round(a + (b - a) * y / max(h - 1, 1)) for a, b in zip(c1, c2)) for y in range(h)])
+    return column.resize((w, h))
+
+
+def apply_template(img: Image.Image, template_id: str) -> Image.Image:
+    """Pose le sujet détouré (RGBA) sur le fond de l'occasion."""
+    colors = TEMPLATE_BACKGROUNDS.get(template_id)
+    if colors is None:
+        raise UnknownTemplate(f"unknown template: {template_id}")
+    if "A" not in img.getbands():
+        raise BadImage("subject must be cut out first (run remove-bg before apply-template)")
+    bg = _gradient(img.size, *colors).convert("RGBA")
+    return Image.alpha_composite(bg, img).convert("RGB")

@@ -74,6 +74,7 @@ def test_rejects_unknown_bucket_and_path_traversal(storage):
 def test_corrupt_image_is_422(storage):
     storage.files[("sources", "u1/bad")] = b"not an image"
     assert make_client(storage).post("/upscale", json={"bucket": "sources", "key": "u1/bad"}).status_code == 422
+    assert make_client(storage).post("/segment", json={"bucket": "sources", "key": "u1/bad", "x": 0.5, "y": 0.5}).status_code == 415
 
 
 def test_storage_outage_is_502(storage):
@@ -94,9 +95,25 @@ def test_moderation_dev_permissive_must_be_explicit(storage):
     assert r.json() == {"approved": True, "nsfwScore": 0.0, "minorRisk": False, "faceCount": 1}
 
 
-def test_templates_not_implemented(storage):
-    r = make_client(storage).post("/apply-template", json={"bucket": "results", "key": "u1/a", "templateId": "t"})
-    assert r.status_code == 501
+def test_apply_template_puts_the_cutout_on_the_occasion_background(storage):
+    # sujet : carré rouge opaque au centre, reste transparent
+    img = Image.new("RGBA", (10, 10), (0, 0, 0, 0))
+    img.paste((255, 0, 0, 255), (3, 3, 7, 7))
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    storage.files[("results", "u1/cut.png")] = buf.getvalue()
+    r = make_client(storage).post("/apply-template", json={"bucket": "results", "key": "u1/cut.png", "templateId": "diplome"})
+    assert r.status_code == 200
+    out = Image.open(io.BytesIO(storage.files[("results", r.json()["key"])])).convert("RGB")
+    assert out.getpixel((5, 5)) == (255, 0, 0)  # le sujet est conservé
+    assert out.getpixel((0, 0)) != (255, 0, 0) and out.getpixel((0, 0)) != (0, 0, 0)  # le fond est un dégradé
+
+
+def test_apply_template_rejects_unknown_style_and_uncut_images(storage):
+    storage.files[("results", "u1/plain.png")] = png(8, 8)
+    c = make_client(storage)
+    assert c.post("/apply-template", json={"bucket": "results", "key": "u1/plain.png", "templateId": "nope"}).status_code == 422
+    assert c.post("/apply-template", json={"bucket": "results", "key": "u1/plain.png", "templateId": "mariage"}).status_code == 422
 
 
 def test_settings_fail_fast(monkeypatch):

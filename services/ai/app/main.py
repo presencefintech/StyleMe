@@ -1,16 +1,21 @@
 import logging
+import threading
+import time
 import uuid
+from collections import OrderedDict
 from functools import lru_cache
+from io import BytesIO
 from typing import Annotated, Callable
 
 from fastapi import Depends, FastAPI, HTTPException
 from PIL import Image
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, model_validator
 
-from . import ops
+from . import ops, segment
 from .config import Settings
 from .storage import Storage, StorageError, SupabaseStorage
 
+logging.basicConfig(level=logging.INFO, format="%(levelname)s:     %(name)s %(message)s")
 log = logging.getLogger("styleme.ai")
 
 # Buckets que ce service a le droit de lire ; il n'écrit que dans "results".
@@ -67,6 +72,53 @@ class ModerationRequest(ImageRef):
     stage: str
 
 
+class Box(BaseModel):
+    """Rectangle tracé par l'utilisateur, en coordonnées normalisées (0..1) de l'image affichée."""
+
+    x0: float
+    y0: float
+    x1: float
+    y1: float
+
+    @model_validator(mode="after")
+    def _valid(self) -> "Box":
+        if not all(0.0 <= v <= 1.0 for v in (self.x0, self.y0, self.x1, self.y1)):
+            raise ValueError("coordinates must be between 0 and 1")
+        if self.x1 <= self.x0 or self.y1 <= self.y0:
+            raise ValueError("box must have a positive size")
+        return self
+
+
+class SegmentRequest(ImageRef):
+    # Un clic (x, y) OU un rectangle (box), en coordonnées normalisées (0..1) de l'image affichée.
+    x: float | None = None
+    y: float | None = None
+    box: Box | None = None
+
+    @model_validator(mode="after")
+    def _target(self) -> "SegmentRequest":
+        has_point = self.x is not None and self.y is not None
+        if has_point == (self.box is not None):  # ni l'un ni l'autre, ou les deux
+            raise ValueError("provide either x and y, or box")
+        if has_point and not (0.0 <= self.x <= 1.0 and 0.0 <= self.y <= 1.0):  # type: ignore[operator]
+            raise ValueError("coordinate must be between 0 and 1")
+        return self
+
+
+class SegmentResponse(BaseModel):
+    selectionId: str  # à renvoyer à /commit pour confirmer cette sélection
+    overlay: str      # aperçu (data URL JPEG) : photo assombrie, objet entouré de blanc
+
+
+class CommitRequest(ImageRef):
+    selectionId: str
+
+
+class CommitResponse(BaseModel):
+    image: ImageRef  # photo normalisée (orientation EXIF appliquée, 2048 px max) : la gomme travaille dessus
+    mask: ImageRef   # masque PNG, blanc = objet à enlever, mêmes dimensions que l'image
+
+
 class ModerationResponse(BaseModel):
     approved: bool
     nsfwScore: float
@@ -112,8 +164,132 @@ def remove_bg(ref: ImageRef, storage: StorageDep) -> ImageRef:
 
 
 @app.post("/apply-template")
-def apply_template(_: TemplateRequest) -> ImageRef:
-    raise HTTPException(status_code=501, detail="templates are not implemented yet")
+def apply_template(req: TemplateRequest, storage: StorageDep) -> ImageRef:
+    if req.templateId not in ops.TEMPLATE_BACKGROUNDS:
+        raise HTTPException(status_code=422, detail="unknown template")
+    return _run(req, storage, lambda img: ops.apply_template(img, req.templateId))
+
+
+# --- Gomme magique : l'analyse SAM d'une photo est gardée en mémoire (seul le 1er clic est lent) ---------
+
+class _Entry:
+    """Photo normalisée + son analyse SAM + sa copie dans le storage (envoyée une seule fois)."""
+
+    def __init__(self, base: Image.Image, prepared: segment.Prepared):
+        self.base = base
+        self.prepared = prepared
+        self.base_ref: ImageRef | None = None
+
+
+_CACHE_MAX = 6
+_cache: "OrderedDict[tuple[str, str], _Entry]" = OrderedDict()
+# SAM tourne sur CPU : on sérialise les calculs (et un clic arrivant pendant l'analyse de la même photo
+# attend simplement la fin de cette analyse, au lieu de la refaire).
+_sam_lock = threading.Lock()
+
+
+def _entry(ref: ImageRef, storage: Storage) -> _Entry:
+    """À appeler avec _sam_lock pris."""
+    key = (ref.bucket, ref.key)
+    entry = _cache.get(key)
+    if entry is not None:
+        _cache.move_to_end(key)
+        return entry
+    base = segment.fit_max_side(ops.load(storage.download(ref.bucket, ref.key))).convert("RGB")
+    entry = _Entry(base, segment.encode(base))
+    _cache[key] = entry
+    while len(_cache) > _CACHE_MAX:
+        _cache.popitem(last=False)
+    return entry
+
+
+def _put(storage: Storage, owner: str, uid: str, name: str, img: Image.Image, fmt: str, content_type: str) -> ImageRef:
+    buf = BytesIO()
+    img.save(buf, format=fmt, **({"quality": 90} if fmt == "JPEG" else {}))
+    ref = ImageRef(bucket=RESULTS_BUCKET, key=f"{owner}/{uid}.{name}")
+    storage.upload(ref.bucket, ref.key, buf.getvalue(), content_type)
+    return ref
+
+
+class PrepareResponse(BaseModel):
+    ready: bool
+
+
+@app.post("/prepare")
+def prepare(ref: ImageRef, storage: StorageDep) -> PrepareResponse:
+    """Prépare une photo (téléchargement + analyse SAM) pour que le premier clic soit rapide."""
+    try:
+        with _sam_lock:
+            _entry(ref, storage)
+        return PrepareResponse(ready=True)
+    except ops.BadImage as e:
+        raise HTTPException(status_code=415, detail=str(e)) from e
+    except StorageError as e:
+        log.error("storage error: %s", e)
+        raise HTTPException(status_code=502, detail="storage unavailable") from e
+
+
+# Sélections en attente : l'aperçu est instantané (rien n'est envoyé au stockage) ; le masque n'est envoyé
+# qu'à la confirmation (/commit).
+_SELECTIONS_MAX = 64
+_selections: "OrderedDict[str, tuple[str, str, bytes]]" = OrderedDict()  # id -> (bucket, key, masque PNG)
+
+
+@app.post("/segment")
+def segment_object(req: SegmentRequest, storage: StorageDep) -> SegmentResponse:
+    """Gomme magique, étape 1 : trouve l'objet sous le clic ou le survol et renvoie un aperçu (data URL).
+
+    Volontairement léger (analyse en cache + décodage ≈ 0,1 s) : le front l'appelle aussi au survol de la souris.
+    """
+    started = time.perf_counter()
+    try:
+        with _sam_lock:
+            entry = _entry(req, storage)
+            if req.box is not None:
+                b = req.box
+                mask = segment.box_mask(entry.base.size, (b.x0, b.y0, b.x1, b.y1))
+            else:
+                mask = segment.select_object(entry.base, entry.prepared, req.x, req.y)  # type: ignore[arg-type]
+            preview = segment.overlay_data_url(entry.base, mask)
+        buf = BytesIO()
+        mask.save(buf, format="PNG")
+        selection_id = uuid.uuid4().hex
+        _selections[selection_id] = (req.bucket, req.key, buf.getvalue())
+        while len(_selections) > _SELECTIONS_MAX:
+            _selections.popitem(last=False)
+        log.info("segment total %.2fs", time.perf_counter() - started)
+        return SegmentResponse(selectionId=selection_id, overlay=preview)
+    except segment.NoObjectFound as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+    except ops.BadImage as e:
+        raise HTTPException(status_code=415, detail=str(e)) from e
+    except StorageError as e:
+        log.error("storage error: %s", e)
+        raise HTTPException(status_code=502, detail="storage unavailable") from e
+
+
+@app.post("/commit")
+def commit_selection(req: CommitRequest, storage: StorageDep) -> CommitResponse:
+    """Gomme magique, étape 2 : la sélection est confirmée, on envoie la photo normalisée et le masque."""
+    sel = _selections.get(req.selectionId)
+    if sel is None or (sel[0], sel[1]) != (req.bucket, req.key):
+        raise HTTPException(status_code=404, detail="selection expired")
+    try:
+        owner = req.key.split("/")[0]
+        with _sam_lock:
+            entry = _entry(req, storage)
+        uid = uuid.uuid4().hex
+        # La photo normalisée n'est envoyée qu'une fois : les confirmations suivantes réutilisent la même copie.
+        if entry.base_ref is None:
+            entry.base_ref = _put(storage, owner, uid, "base.jpg", entry.base, "JPEG", "image/jpeg")
+        mask_ref = ImageRef(bucket=RESULTS_BUCKET, key=f"{owner}/{uid}.mask.png")
+        storage.upload(mask_ref.bucket, mask_ref.key, sel[2], "image/png")
+        return CommitResponse(image=entry.base_ref, mask=mask_ref)
+    except ops.BadImage as e:
+        raise HTTPException(status_code=415, detail=str(e)) from e
+    except StorageError as e:
+        log.error("storage error: %s", e)
+        raise HTTPException(status_code=502, detail="storage unavailable") from e
 
 
 @app.post("/moderate")
