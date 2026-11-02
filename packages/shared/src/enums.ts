@@ -1,4 +1,4 @@
-export const JOB_TYPES = ["ENHANCE", "PHOTOSHOOT"] as const;
+export const JOB_TYPES = ["ENHANCE", "PHOTOSHOOT", "EDIT", "ERASE"] as const;
 export type JobType = (typeof JOB_TYPES)[number];
 
 export const JOB_STATUSES = ["PENDING", "PROCESSING", "DONE", "REJECTED", "FAILED"] as const;

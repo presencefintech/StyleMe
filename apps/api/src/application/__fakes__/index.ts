@@ -11,6 +11,10 @@ import type {
   Clock,
   CreditLedgerRepository,
   IdGenerator,
+  ImageEditor,
+  ObjectEraser,
+  ObjectSelector,
+  SegmentTarget,
   ImageEnhancer,
   InitiatePaymentRequest,
   JobQueue,
@@ -25,6 +29,7 @@ import type {
   UserRepository,
 } from "../../domain/ports";
 import type { Job } from "../../domain/entities/job";
+import { SelectionExpired } from "../../domain/errors";
 import type { Payment } from "../../domain/entities/payment";
 import type { User } from "../../domain/entities/user";
 import { CreditAmount } from "../../domain/value-objects/credit-amount";
@@ -48,6 +53,9 @@ export class InMemoryAssetRepository implements AssetRepository {
   readonly items = new Map<string, AssetRecord>();
   async save(a: AssetRecord) { this.items.set(a.id, a); }
   async findByIds(ids: string[]) { return ids.flatMap((id) => this.items.get(id) ?? []); }
+  async findByRef(bucket: string, key: string) {
+    return [...this.items.values()].find((a) => a.bucket === bucket && a.key === key) ?? null;
+  }
 }
 
 export class InMemoryStyleRepository implements StyleRepository {
@@ -117,6 +125,54 @@ export class FakeEnhancer implements ImageEnhancer {
   }
   async restoreFace(src: ImageRef): Promise<ImageRef> {
     return { bucket: "results", key: `${src.key}.face` };
+  }
+}
+
+export class FakeEditor implements ImageEditor {
+  readonly calls: { src: ImageRef; instruction: string }[] = [];
+  constructor(private failWith?: Error) {}
+  async edit(src: ImageRef, instruction: string): Promise<ImageRef> {
+    this.calls.push({ src, instruction });
+    if (this.failWith) throw this.failWith;
+    return { bucket: "results", key: `${src.key}.edited` };
+  }
+}
+
+export class FakeEraser implements ObjectEraser {
+  readonly calls: { image: ImageRef; mask: ImageRef }[] = [];
+  constructor(private failWith?: Error) {}
+  async erase(image: ImageRef, mask: ImageRef): Promise<ImageRef> {
+    this.calls.push({ image, mask });
+    if (this.failWith) throw this.failWith;
+    return { bucket: "results", key: image.key + ".erased" };
+  }
+}
+
+export class FakeObjectSelector implements ObjectSelector {
+  readonly calls: ({ src: ImageRef } & SegmentTarget)[] = [];
+  readonly commits: { src: ImageRef; selectionId: string }[] = [];
+  readonly prepared: ImageRef[] = [];
+  private readonly selections = new Map<string, ImageRef>();
+  constructor(private failWith?: Error) {}
+  async prepare(src: ImageRef) {
+    this.prepared.push(src);
+    if (this.failWith) throw this.failWith;
+  }
+  async select(src: ImageRef, target: SegmentTarget) {
+    this.calls.push({ src, ...target });
+    if (this.failWith) throw this.failWith;
+    const selectionId = "sel" + this.calls.length;
+    this.selections.set(selectionId, src);
+    return { selectionId, overlayUrl: "data:image/jpeg;base64,AAAA" };
+  }
+  async commit(src: ImageRef, selectionId: string) {
+    this.commits.push({ src, selectionId });
+    if (this.selections.get(selectionId)?.key !== src.key) throw new SelectionExpired("expirée");
+    const owner = src.key.split("/")[0];
+    return {
+      image: { bucket: "results", key: owner + "/base-" + src.key.replace(/\W/g, "_") + ".base.jpg" }, // partagée par les confirmations
+      mask: { bucket: "results", key: owner + "/" + selectionId + ".mask.png" },
+    };
   }
 }
 

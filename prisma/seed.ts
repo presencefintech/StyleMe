@@ -13,6 +13,11 @@ const STYLES: { id: string; name: string; kind: StyleKind; creditCost: number }[
   { id: "pro-linkedin", name: "Portrait professionnel", kind: "TEMPLATE", creditCost: 1 },
   { id: "cv", name: "Photo de CV", kind: "TEMPLATE", creditCost: 1 },
   { id: "fond-studio", name: "Fond studio neutre", kind: "TEMPLATE", creditCost: 1 },
+  // « Nettoyage & Studio » : photo de profil, vêtements inchangés (consignes dans packages/shared/src/catalog.ts)
+  { id: "studio-blanc", name: "Fond blanc", kind: "CLEANUP", creditCost: 1 },
+  { id: "studio-gris", name: "Gris studio", kind: "CLEANUP", creditCost: 1 },
+  { id: "studio-bleu", name: "Bleu doux", kind: "CLEANUP", creditCost: 1 },
+  { id: "studio-beige", name: "Beige chaleureux", kind: "CLEANUP", creditCost: 1 },
 ];
 
 async function main() {

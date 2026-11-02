@@ -14,6 +14,10 @@ const schema = z
     REPLICATE_TOKEN: z.string().optional(),
     REPLICATE_UPSCALE_MODEL: z.string().optional(),
     REPLICATE_FACE_MODEL: z.string().optional(),
+    /** Modèle d'édition par instruction (jobs EDIT). Nécessite REPLICATE_TOKEN. */
+    REPLICATE_EDIT_MODEL: z.string().default("black-forest-labs/flux-kontext-pro"),
+    /** Modèle de gomme (jobs ERASE). Nécessite REPLICATE_TOKEN. */
+    REPLICATE_ERASE_MODEL: z.string().default("bria/eraser"),
     REMOVEBG_KEY: z.string().optional(),
     MODERATION_PROVIDER: z.enum(["local", "sightengine"]),
     SIGHTENGINE_USER: z.string().optional(),

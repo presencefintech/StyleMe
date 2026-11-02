@@ -26,7 +26,7 @@ export class InlineJobQueue implements JobQueue {
           setTimeout(() => void this.process(jobId, attempt + 1), 5000 * attempt);
           return;
         }
-        this.log(`job ${jobId} not processed: ${result.error.name}`);
+        this.log(`job ${jobId} not processed: ${result.error.name}: ${result.error.message}`);
         return;
       }
       await this.push.notifyJobReady(jobId);

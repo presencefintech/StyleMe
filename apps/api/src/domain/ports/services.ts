@@ -11,6 +11,28 @@ export interface BackgroundService {
   remove(src: ImageRef): Promise<ImageRef>;
   applyTemplate(src: ImageRef, templateId: string): Promise<ImageRef>;
 }
+/** Édition d'image par instruction en langage naturel (ex. "enlève l'objet au fond"). */
+export interface ImageEditor {
+  edit(src: ImageRef, instruction: string): Promise<ImageRef>;
+}
+/** Ce que l'utilisateur désigne : un clic, ou un rectangle tracé à la main (coordonnées normalisées 0..1). */
+export type SegmentTarget = { x: number; y: number } | { box: { x0: number; y0: number; x1: number; y1: number } };
+
+/**
+ * Sélection d'un objet par clic (SAM) ou d'une zone par rectangle. Deux temps :
+ *  - select()  : aperçu instantané (data URL), sans aucun effet de bord ;
+ *  - commit()  : la sélection est confirmée, la photo normalisée et le masque sont envoyés au stockage.
+ */
+export interface ObjectSelector {
+  /** Préchauffe l'analyse d'une photo (le 1er clic est ensuite rapide). */
+  prepare(src: ImageRef): Promise<void>;
+  select(src: ImageRef, target: SegmentTarget): Promise<{ selectionId: string; overlayUrl: string }>;
+  commit(src: ImageRef, selectionId: string): Promise<{ image: ImageRef; mask: ImageRef }>;
+}
+/** Gomme : remplit la zone masquee de maniere naturelle. */
+export interface ObjectEraser {
+  erase(image: ImageRef, mask: ImageRef): Promise<ImageRef>;
+}
 export interface ModerationService {
   check(src: ImageRef, stage: "input" | "output"): Promise<ModerationResult>;
 }

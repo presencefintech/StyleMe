@@ -25,6 +25,7 @@ export class PrismaJobRepository implements JobRepository {
       userId: job.userId,
       type: job.type,
       styleId: job.styleId ?? null,
+      prompt: job.prompt ?? null,
       creditCost: job.creditCost.value,
       status: job.status,
       inputAssetIds: job.inputAssetIds,
@@ -52,11 +53,11 @@ export class PrismaJobRepository implements JobRepository {
 }
 
 function toJob(r: {
-  id: string; userId: string; type: "ENHANCE" | "PHOTOSHOOT"; styleId: string | null; creditCost: number;
+  id: string; userId: string; type: "ENHANCE" | "PHOTOSHOOT" | "EDIT" | "ERASE"; styleId: string | null; prompt: string | null; creditCost: number;
   status: "PENDING" | "PROCESSING" | "DONE" | "REJECTED" | "FAILED"; inputAssetIds: string[]; outputAssetIds: string[]; errorReason: string | null; createdAt: Date;
 }): Job {
   return Job.restore({
-    id: r.id, userId: r.userId, type: r.type, styleId: r.styleId ?? undefined, creditCost: CreditAmount.of(r.creditCost),
+    id: r.id, userId: r.userId, type: r.type, styleId: r.styleId ?? undefined, prompt: r.prompt ?? undefined, creditCost: CreditAmount.of(r.creditCost),
     status: r.status, inputAssetIds: r.inputAssetIds, outputAssetIds: r.outputAssetIds, errorReason: r.errorReason ?? undefined, createdAt: r.createdAt,
   });
 }
@@ -132,6 +133,10 @@ export class PrismaAssetRepository implements AssetRepository {
   async findByIds(ids: string[]) {
     const rows = await this.prisma.db.asset.findMany({ where: { id: { in: ids }, deletedAt: null } });
     return rows.map((r): AssetRecord => ({ id: r.id, userId: r.userId, kind: r.kind as AssetRecord["kind"], bucket: r.bucket, key: r.key }));
+  }
+  async findByRef(bucket: string, key: string) {
+    const r = await this.prisma.db.asset.findFirst({ where: { bucket, key, deletedAt: null } });
+    return r ? ({ id: r.id, userId: r.userId, kind: r.kind as AssetRecord["kind"], bucket: r.bucket, key: r.key } as AssetRecord) : null;
   }
 }
 

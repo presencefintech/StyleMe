@@ -41,13 +41,16 @@ export interface UserRepository {
 export interface AssetRecord {
   id: string;
   userId: string;
-  kind: AssetKind;
+  /** RESULT = résultat d'un job réutilisé comme source (retouche enchaînée). */
+  kind: AssetKind | "RESULT";
   bucket: string;
   key: string;
 }
 export interface AssetRepository {
   save(asset: AssetRecord): Promise<void>;
   findByIds(ids: string[]): Promise<AssetRecord[]>;
+  /** Un même fichier (bucket + key) n'a qu'un seul enregistrement. */
+  findByRef(bucket: string, key: string): Promise<AssetRecord | null>;
 }
 
 export interface StyleSummary {

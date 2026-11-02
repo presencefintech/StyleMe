@@ -7,6 +7,8 @@ export interface JobProps {
   userId: string;
   type: JobType;
   styleId?: string;
+  /** Instruction libre (jobs EDIT). */
+  prompt?: string;
   creditCost: CreditAmount;
   status: JobStatus;
   inputAssetIds: string[];
@@ -24,6 +26,7 @@ export class Job {
     userId: string;
     type: JobType;
     styleId?: string;
+    prompt?: string;
     creditCost: CreditAmount;
     inputAssetIds: string[];
   }): Job {
@@ -37,6 +40,7 @@ export class Job {
   get userId() { return this.props.userId; }
   get type() { return this.props.type; }
   get styleId() { return this.props.styleId; }
+  get prompt() { return this.props.prompt; }
   get creditCost() { return this.props.creditCost; }
   get status() { return this.props.status; }
   get inputAssetIds() { return [...this.props.inputAssetIds]; }

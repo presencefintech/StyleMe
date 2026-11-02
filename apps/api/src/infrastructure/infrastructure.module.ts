@@ -4,10 +4,10 @@ import { createClient } from "@supabase/supabase-js";
 import { Redis } from "ioredis";
 import type { Worker } from "bullmq";
 import { RunEnhancementJob } from "../application";
-import type { BackgroundService, ImageEnhancer, ModerationService, PushService } from "../domain/ports";
+import type { BackgroundService, ImageEditor, ImageEnhancer, ModerationService, ObjectEraser, ObjectSelector, PushService } from "../domain/ports";
 import { T, type IdempotencyStore, type TokenVerifier } from "../presentation/http/common";
-import { ReplicateEnhancer, RemoveBgBackground, SightengineModeration } from "./ai/api-ai";
-import { LocalBackground, LocalEnhancer, LocalModeration } from "./ai/local-ai";
+import { RemoveBgBackground, ReplicateEditor, ReplicateEnhancer, ReplicateEraser, SightengineModeration, UnconfiguredEditor, UnconfiguredEraser } from "./ai/api-ai";
+import { LocalBackground, LocalEnhancer, LocalModeration, LocalObjectSelector } from "./ai/local-ai";
 import { JwtTokenService, ScryptPasswordHasher } from "./auth/auth-adapters";
 import { LogPushService, SystemClock, UuidGenerator } from "./common/common";
 import type { Env } from "./config/env";
@@ -106,6 +106,23 @@ export class InfrastructureModule {
         inject: [T.STORAGE],
       },
       {
+        provide: T.EDITOR,
+        useFactory: (storage: SupabaseStorageService): ImageEditor =>
+          env.REPLICATE_TOKEN ? new ReplicateEditor(env.REPLICATE_TOKEN, env.REPLICATE_EDIT_MODEL, storage) : new UnconfiguredEditor(),
+        inject: [T.STORAGE],
+      },
+      {
+        provide: T.ERASER,
+        useFactory: (storage: SupabaseStorageService): ObjectEraser =>
+          env.REPLICATE_TOKEN ? new ReplicateEraser(env.REPLICATE_TOKEN, env.REPLICATE_ERASE_MODEL, storage) : new UnconfiguredEraser(),
+        inject: [T.STORAGE],
+      },
+      {
+        provide: T.SELECTOR,
+        // La sélection par clic (SAM) tourne dans le service IA local, quel que soit AI_MODE.
+        useFactory: (): ObjectSelector => new LocalObjectSelector(env.LOCAL_AI_URL ?? "http://127.0.0.1:8000"),
+      },
+      {
         provide: T.BACKGROUND,
         useFactory: (storage: SupabaseStorageService): BackgroundService =>
           env.AI_MODE === "local" ? new LocalBackground(env.LOCAL_AI_URL!) : new RemoveBgBackground(env.REMOVEBG_KEY!, storage),
@@ -141,13 +158,13 @@ export class InfrastructureModule {
       {
         provide: "RUN_JOB",
         useFactory: (...a: ConstructorParameters<typeof RunEnhancementJob>) => new RunEnhancementJob(...a),
-        inject: [T.JOBS, T.LEDGER, T.ASSETS, T.MODERATION, T.ENHANCER, T.BACKGROUND, T.UOW],
+        inject: [T.JOBS, T.LEDGER, T.ASSETS, T.MODERATION, T.ENHANCER, T.BACKGROUND, T.EDITOR, T.ERASER, T.UOW],
       },
       ...(env.REDIS_URL ? [QueueRuntime] : []),
     ];
     const exported = [
       PrismaService, T.UOW, T.JOBS, T.LEDGER, T.PAYMENTS, T.USERS, T.ASSETS, T.STYLES, T.IDEMPOTENCY, T.IDS, T.CLOCK, T.PUSH,
-      T.STORAGE, T.QUEUE, T.ENHANCER, T.BACKGROUND, T.MODERATION, T.GATEWAY, T.PASSWORD, T.TOKEN_ISSUER, T.TOKEN_VERIFIER,
+      T.STORAGE, T.QUEUE, T.ENHANCER, T.BACKGROUND, T.EDITOR, T.ERASER, T.SELECTOR, T.MODERATION, T.GATEWAY, T.PASSWORD, T.TOKEN_ISSUER, T.TOKEN_VERIFIER,
     ];
     return {
       module: InfrastructureModule,

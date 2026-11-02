@@ -78,7 +78,7 @@ describe("parcours complet : upload → job → résultat", () => {
     expect(fakes.queue.enqueued).toEqual([created.body.jobId]);
 
     // Le worker traite le job
-    const run = new RunEnhancementJob(fakes.jobs, fakes.ledger, fakes.assets, fakes.moderation, fakes.enhancer, fakes.background, fakes.uow);
+    const run = new RunEnhancementJob(fakes.jobs, fakes.ledger, fakes.assets, fakes.moderation, fakes.enhancer, fakes.background, fakes.editor, fakes.eraser, fakes.uow);
     expect((await run.execute(created.body.jobId)).ok).toBe(true);
 
     const got = await request(app.getHttpServer()).get(`${P}/jobs/${created.body.jobId}`).set(h).expect(200);

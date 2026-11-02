@@ -1,6 +1,9 @@
 import { Global, Module, type DynamicModule } from "@nestjs/common";
 import {
   FakeBackground,
+  FakeEditor,
+  FakeEraser,
+  FakeObjectSelector,
   FakeEnhancer,
   FakeJobQueue,
   FakeModeration,
@@ -39,6 +42,9 @@ export function createInMemoryPorts() {
     moderation: new FakeModeration(),
     enhancer: new FakeEnhancer(),
     background: new FakeBackground(),
+    editor: new FakeEditor(),
+    eraser: new FakeEraser(),
+    selector: new FakeObjectSelector(),
     storage: new FakeStorage(),
     gateway: new FakePaymentGateway(),
     password: new FakePasswordHasher(),
@@ -59,7 +65,7 @@ export function createInMemoryPorts() {
   const providers = [
     [T.JOBS, fakes.jobs], [T.LEDGER, fakes.ledger], [T.PAYMENTS, fakes.payments], [T.USERS, fakes.users],
     [T.ASSETS, fakes.assets], [T.STYLES, fakes.styles], [T.MODERATION, fakes.moderation], [T.ENHANCER, fakes.enhancer],
-    [T.BACKGROUND, fakes.background], [T.STORAGE, fakes.storage], [T.GATEWAY, fakes.gateway], [T.PASSWORD, fakes.password],
+    [T.BACKGROUND, fakes.background], [T.EDITOR, fakes.editor], [T.ERASER, fakes.eraser], [T.SELECTOR, fakes.selector], [T.STORAGE, fakes.storage], [T.GATEWAY, fakes.gateway], [T.PASSWORD, fakes.password],
     [T.TOKEN_ISSUER, fakes.tokens], [T.TOKEN_VERIFIER, verifier], [T.QUEUE, fakes.queue], [T.UOW, fakes.uow],
     [T.IDS, fakes.ids], [T.CLOCK, fakes.clock], [T.PUSH, fakes.push], [T.IDEMPOTENCY, fakes.idempotency],
   ].map(([provide, useValue]) => ({ provide: provide as string, useValue }));

@@ -30,7 +30,7 @@ export function createEnhancementWorker(connection: Redis, runJob: RunEnhancemen
       if (!result.ok) {
         // Erreur retryable seulement si le job n'est pas encore définitivement échoué.
         if (!isLastAttempt && result.error.name === "ProviderFailure") throw result.error;
-        log(`job ${job.data.jobId} not processed: ${result.error.name}`);
+        log(`job ${job.data.jobId} not processed: ${result.error.name}: ${result.error.message}`);
         return;
       }
       await push.notifyJobReady(job.data.jobId);

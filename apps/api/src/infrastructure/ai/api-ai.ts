@@ -1,4 +1,5 @@
-import type { BackgroundService, ImageEnhancer, ModerationResult, ModerationService, StorageService } from "../../domain/ports";
+import type { BackgroundService, ImageEditor, ImageEnhancer, ObjectEraser, ModerationResult, ModerationService, StorageService } from "../../domain/ports";
+import { ProviderRejectedContent } from "../../domain/errors";
 import type { ImageRef } from "../../domain/value-objects/image-ref";
 import type { Fetch } from "./local-ai";
 
@@ -94,5 +95,119 @@ export class SightengineModeration implements ModerationService {
     // Prudence : un score "mineur" élevé suffit à bloquer.
     const minorRisk = faces.some((f) => (f.attributes?.minor ?? 0) >= 0.5);
     return { approved: nsfwScore < 0.5, nsfwScore, minorRisk, faceCount: faces.length };
+  }
+}
+
+interface ReplicatePrediction {
+  status: string;
+  output?: string | string[];
+  error?: string;
+  urls?: { get?: string };
+}
+
+/** Lance une prédiction Replicate, attend sa fin et renvoie l'URL du résultat. */
+async function runReplicate(
+  fetcher: Fetch,
+  token: string,
+  endpoint: string,
+  input: Record<string, unknown>,
+  pollMs: number,
+  maxWaitMs: number,
+): Promise<string> {
+  const headers = { authorization: `Bearer ${token}`, "content-type": "application/json" };
+  const res = await fetcher(endpoint, { method: "POST", headers: { ...headers, prefer: "wait" }, body: JSON.stringify({ input }) });
+  if (!res.ok) throw new Error(`Replicate responded ${res.status}`);
+  let p = (await res.json()) as ReplicatePrediction;
+
+  const deadline = Date.now() + maxWaitMs;
+  while ((p.status === "starting" || p.status === "processing") && p.urls?.get) {
+    if (Date.now() > deadline) throw new Error("Replicate prediction timed out");
+    await new Promise((r) => setTimeout(r, pollMs));
+    const poll = await fetcher(p.urls.get, { headers });
+    if (!poll.ok) throw new Error(`Replicate poll responded ${poll.status}`);
+    p = (await poll.json()) as ReplicatePrediction;
+  }
+  // Filtre de sécurité du modèle (E005) : refus définitif, pas une panne.
+  if (p.status === "failed" && /flagged as sensitive|\(E005\)/i.test(p.error ?? "")) throw new ProviderRejectedContent(p.error);
+  if (p.status !== "succeeded" || !p.output) throw new Error(`Replicate prediction ${p.status}: ${p.error ?? "no output"}`);
+  const out = Array.isArray(p.output) ? p.output[0] : p.output;
+  if (!out) throw new Error("Replicate returned empty output");
+  return out;
+}
+
+const extOf = (url: string) => (/\.jpe?g(\?|$)/i.test(url) ? { ext: "jpg", type: "image/jpeg" } : { ext: "png", type: "image/png" });
+
+/**
+ * Édition par instruction via Replicate (FLUX Kontext). Le modèle ne modifie que ce qui est demandé
+ * et conserve le reste de la photo (y compris le texte présent dans l'image).
+ */
+export class ReplicateEditor implements ImageEditor {
+  constructor(
+    private readonly token: string,
+    private readonly model: string,
+    private readonly storage: StorageService,
+    private readonly fetcher: Fetch = fetch,
+    private readonly newKey: () => string = () => crypto.randomUUID(),
+    private readonly pollMs = 2000,
+    private readonly maxWaitMs = 120_000,
+  ) {}
+
+  async edit(src: ImageRef, instruction: string): Promise<ImageRef> {
+    const { url: input } = await this.storage.presignDownload(src, 600);
+    const outUrl = await runReplicate(
+      this.fetcher,
+      this.token,
+      `https://api.replicate.com/v1/models/${this.model}/predictions`,
+      { prompt: instruction, input_image: input, output_format: "png" },
+      this.pollMs,
+      this.maxWaitMs,
+    );
+    const data = await download(this.fetcher, outUrl);
+    const ref = { bucket: RESULTS_BUCKET, key: `${src.key.split("/")[0] ?? "x"}/${this.newKey()}.png` };
+    await this.storage.put(ref, data, "image/png");
+    return ref;
+  }
+}
+
+/** Gomme via Replicate (Bria Eraser) : remplit la zone blanche du masque de façon naturelle. */
+export class ReplicateEraser implements ObjectEraser {
+  constructor(
+    private readonly token: string,
+    private readonly model: string,
+    private readonly storage: StorageService,
+    private readonly fetcher: Fetch = fetch,
+    private readonly newKey: () => string = () => crypto.randomUUID(),
+    private readonly pollMs = 2000,
+    private readonly maxWaitMs = 120_000,
+  ) {}
+
+  async erase(image: ImageRef, mask: ImageRef): Promise<ImageRef> {
+    const [img, msk] = await Promise.all([this.storage.presignDownload(image, 600), this.storage.presignDownload(mask, 600)]);
+    const outUrl = await runReplicate(
+      this.fetcher,
+      this.token,
+      `https://api.replicate.com/v1/models/${this.model}/predictions`,
+      { image_url: img.url, mask_url: msk.url, preserve_alpha: false, content_moderation: false },
+      this.pollMs,
+      this.maxWaitMs,
+    );
+    const { ext, type } = extOf(outUrl);
+    const data = await download(this.fetcher, outUrl);
+    const ref = { bucket: RESULTS_BUCKET, key: `${image.key.split("/")[0] ?? "x"}/${this.newKey()}.${ext}` };
+    await this.storage.put(ref, data, type);
+    return ref;
+  }
+}
+
+/** Édition demandée alors qu'aucun fournisseur n'est configuré : le job échoue proprement (0 crédit). */
+export class UnconfiguredEditor implements ImageEditor {
+  async edit(): Promise<ImageRef> {
+    throw new Error("Édition non configurée : définir REPLICATE_TOKEN sur l'API");
+  }
+}
+
+export class UnconfiguredEraser implements ObjectEraser {
+  async erase(): Promise<ImageRef> {
+    throw new Error("Gomme non configurée : définir REPLICATE_TOKEN sur l'API");
   }
 }

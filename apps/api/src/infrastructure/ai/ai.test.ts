@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { FakeStorage } from "../../application/__fakes__";
-import { RemoveBgBackground, ReplicateEnhancer, SightengineModeration } from "./api-ai";
+import { RemoveBgBackground, ReplicateEditor, ReplicateEnhancer, SightengineModeration, UnconfiguredEditor } from "./api-ai";
+import { ProviderRejectedContent } from "../../domain/errors";
 import { LocalEnhancer, LocalModeration } from "./local-ai";
 
 const json = (body: unknown, ok = true) => ({ ok, status: ok ? 200 : 500, json: async () => body }) as Response;
@@ -60,5 +61,51 @@ describe("SightengineModeration", () => {
   it("signale un risque mineur", async () => {
     const r = await mod({ nudity: { none: 1 }, faces: [{ attributes: { minor: 0.8 } }] }).check({ bucket: "b", key: "k" });
     expect(r.minorRisk).toBe(true);
+  });
+});
+
+describe("ReplicateEditor", () => {
+  const png = { ok: true, arrayBuffer: async () => new ArrayBuffer(3) } as Response;
+
+  it("envoie l'instruction et l'image au modèle, puis dépose le résultat dans results", async () => {
+    const storage = new FakeStorage();
+    const fetcher = vi.fn().mockResolvedValueOnce(json({ status: "succeeded", output: "https://rep/out.png" })).mockResolvedValueOnce(png);
+    const e = new ReplicateEditor("tok", "black-forest-labs/flux-kontext-pro", storage, fetcher as unknown as typeof fetch, () => "k1");
+    const r = await e.edit({ bucket: "sources", key: "u1/in" }, "enlève l'objet au fond");
+    expect(r).toEqual({ bucket: "results", key: "u1/k1.png" });
+    const [url, init] = fetcher.mock.calls[0]!;
+    expect(url).toBe("https://api.replicate.com/v1/models/black-forest-labs/flux-kontext-pro/predictions");
+    const body = JSON.parse(init.body);
+    expect(body.input.prompt).toBe("enlève l'objet au fond");
+    expect(body.input.input_image).toContain("/dl/sources/u1/in");
+    expect(storage.puts).toEqual([r]);
+  });
+
+  it("attend la fin de la prédiction si elle n'est pas terminée", async () => {
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(json({ status: "processing", urls: { get: "https://rep/p/1" } }))
+      .mockResolvedValueOnce(json({ status: "processing", urls: { get: "https://rep/p/1" } }))
+      .mockResolvedValueOnce(json({ status: "succeeded", output: ["https://rep/out.png"] }))
+      .mockResolvedValueOnce(png);
+    const e = new ReplicateEditor("tok", "m/x", new FakeStorage(), fetcher as unknown as typeof fetch, () => "k", 1, 5000);
+    await expect(e.edit({ bucket: "sources", key: "u1/in" }, "x")).resolves.toMatchObject({ bucket: "results" });
+    expect(fetcher.mock.calls[1]![0]).toBe("https://rep/p/1");
+  });
+
+  it("échoue si la prédiction échoue ou dépasse le délai", async () => {
+    const failed = vi.fn().mockResolvedValue(json({ status: "failed", error: "NSFW detected" }));
+    await expect(new ReplicateEditor("t", "m/x", new FakeStorage(), failed as unknown as typeof fetch).edit({ bucket: "b", key: "u/k" }, "x")).rejects.toThrow(/NSFW/);
+    const slow = vi.fn().mockResolvedValue(json({ status: "processing", urls: { get: "https://rep/p" } }));
+    await expect(new ReplicateEditor("t", "m/x", new FakeStorage(), slow as unknown as typeof fetch, () => "k", 1, 20).edit({ bucket: "b", key: "u/k" }, "x")).rejects.toThrow(/timed out/);
+  });
+
+  it("le filtre de sécurité (E005) devient un refus de contenu, pas une panne", async () => {
+    const f = vi.fn().mockResolvedValue(json({ status: "failed", error: "The input or output was flagged as sensitive. (E005)" }));
+    await expect(new ReplicateEditor("t", "m/x", new FakeStorage(), f as unknown as typeof fetch).edit({ bucket: "b", key: "u/k" }, "x")).rejects.toBeInstanceOf(ProviderRejectedContent);
+  });
+
+  it("sans token configuré, l'éditeur échoue clairement", async () => {
+    await expect(new UnconfiguredEditor().edit()).rejects.toThrow(/REPLICATE_TOKEN/);
   });
 });

@@ -22,7 +22,9 @@ import {
   ConfirmAgeDto,
   CreateJobDto,
   InitiatePaymentDto,
+  CommitSelectionDto,
   PresignDto,
+  SegmentDto,
   LoginDto,
   RegisterDto,
 } from "@styleme/shared";
@@ -36,7 +38,11 @@ import {
   InitiatePayment,
   ListStyles,
   ListUserJobs,
+  CommitSelection,
+  GetJobResultAsset,
+  PrepareObject,
   PresignAsset,
+  SegmentObject,
   Login,
   Register,
 } from "../../application";
@@ -105,6 +111,9 @@ class AssetsController {
   constructor(
     @Inject(PresignAsset) private readonly presign: PresignAsset,
     @Inject(ListStyles) private readonly listStyles: ListStyles,
+    @Inject(SegmentObject) private readonly segmentObject: SegmentObject,
+    @Inject(PrepareObject) private readonly prepareObject: PrepareObject,
+    @Inject(CommitSelection) private readonly commitSelection: CommitSelection,
   ) {}
 
   @Post("assets/presign")
@@ -112,6 +121,35 @@ class AssetsController {
   @UseGuards(JwtGuard)
   async create(@CurrentUser() user: AuthUser, @Body() body: unknown) {
     return unwrap(await this.presign.execute({ userId: user.id, kind: parseBody(PresignDto, body).kind }));
+  }
+
+  /** Gomme magique : préchauffe l'analyse d'une photo juste après son envoi (le 1er clic devient rapide). */
+  @Post("assets/:id/prepare")
+  @HttpCode(204)
+  @UseGuards(JwtGuard)
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
+  async prepare(@CurrentUser() user: AuthUser, @Param("id") id: string) {
+    unwrap(await this.prepareObject.execute({ userId: user.id, assetId: id }));
+  }
+
+  /** Gomme magique, étape 1 : trouve l'objet sous le clic (x, y normalisés 0..1) et renvoie un aperçu à confirmer. */
+  @Post("assets/:id/segment")
+  @HttpCode(200)
+  @UseGuards(JwtGuard)
+  @Throttle({ default: { limit: 1200, ttl: 60_000 } }) // appelé aussi au survol de la souris
+  async segment(@CurrentUser() user: AuthUser, @Param("id") id: string, @Body() body: unknown) {
+    const target = parseBody(SegmentDto, body); // { x, y } (clic) ou { box } (rectangle)
+    return unwrap(await this.segmentObject.execute({ userId: user.id, assetId: id, ...target }));
+  }
+
+  /** Gomme magique, étape 2 : confirme la sélection (envoie la photo normalisée et le masque au stockage). */
+  @Post("assets/:id/selection")
+  @HttpCode(200)
+  @UseGuards(JwtGuard)
+  @Throttle({ default: { limit: 60, ttl: 60_000 } })
+  async commit(@CurrentUser() user: AuthUser, @Param("id") id: string, @Body() body: unknown) {
+    const { selectionId } = parseBody(CommitSelectionDto, body);
+    return unwrap(await this.commitSelection.execute({ userId: user.id, assetId: id, selectionId }));
   }
 
   @Get("styles")
@@ -123,7 +161,7 @@ class AssetsController {
 
 @Module({
   controllers: [AssetsController],
-  providers: [JwtGuard, useCase(PresignAsset, [T.ASSETS, T.STORAGE, T.IDS, T.CLOCK]), useCase(ListStyles, [T.STYLES])],
+  providers: [JwtGuard, useCase(PresignAsset, [T.ASSETS, T.STORAGE, T.IDS, T.CLOCK]), useCase(ListStyles, [T.STYLES]), useCase(SegmentObject, [T.USERS, T.ASSETS, T.SELECTOR]), useCase(PrepareObject, [T.USERS, T.ASSETS, T.SELECTOR]), useCase(CommitSelection, [T.USERS, T.ASSETS, T.SELECTOR, T.IDS])],
 })
 export class AssetsModule {}
 
@@ -136,6 +174,7 @@ class JobsController {
     @Inject(CreateJob) private readonly createJob: CreateJob,
     @Inject(GetJob) private readonly getJob: GetJob,
     @Inject(ListUserJobs) private readonly listJobs: ListUserJobs,
+    @Inject(GetJobResultAsset) private readonly resultAsset: GetJobResultAsset,
   ) {}
 
   @Post()
@@ -145,6 +184,13 @@ class JobsController {
     const dto = parseBody(CreateJobDto, body);
     const job = unwrap(await this.createJob.execute({ userId: user.id, ...dto }));
     return { jobId: job.id, status: job.status };
+  }
+
+  /** Fait du résultat d'un job une photo réutilisable comme source (ex. gommer un autre objet dessus). */
+  @Post(":id/asset")
+  @HttpCode(200)
+  async asResultAsset(@CurrentUser() user: AuthUser, @Param("id") id: string) {
+    return unwrap(await this.resultAsset.execute({ userId: user.id, jobId: id }));
   }
 
   @Get(":id")
@@ -170,6 +216,7 @@ class JobsController {
     useCase(CreateJob, [T.USERS, T.JOBS, T.LEDGER, T.ASSETS, T.QUEUE, T.IDS]),
     useCase(GetJob, [T.JOBS, T.STORAGE]),
     useCase(ListUserJobs, [T.JOBS]),
+    useCase(GetJobResultAsset, [T.JOBS, T.ASSETS, T.STORAGE, T.IDS]),
   ],
 })
 export class JobsModule {}

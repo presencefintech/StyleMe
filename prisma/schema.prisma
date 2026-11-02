@@ -10,6 +10,8 @@ datasource db {
 enum JobType {
   ENHANCE
   PHOTOSHOOT
+  EDIT
+  ERASE
 }
 
 enum JobStatus {
@@ -35,6 +37,7 @@ enum AssetKind {
 enum StyleKind {
   OCCASION
   TEMPLATE
+  CLEANUP
 }
 
 model User {
@@ -78,6 +81,7 @@ model Job {
   userId         String
   user           User           @relation(fields: [userId], references: [id])
   type           JobType
+  prompt         String?
   styleId        String?
   style          StyleTemplate? @relation(fields: [styleId], references: [id])
   creditCost     Int
