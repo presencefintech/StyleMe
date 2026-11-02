@@ -2,3 +2,9 @@ node_modules
 dist
 .env
 .next
+.venv
+__pycache__
+.pytest_cache
+.env.local
+*.tsbuildinfo
+/image.png
