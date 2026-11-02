@@ -22,6 +22,13 @@ export interface JobView {
   errorReason?: string;
 }
 export interface JobPage { items: JobView[]; nextCursor: string | null }
+/** Résultat d'une sélection par clic (gomme magique). */
+/** Ce que l'utilisateur désigne sur la photo (coordonnées normalisées 0..1) : un clic sur un objet, ou un rectangle tracé. */
+export type SegmentTarget = { x: number; y: number } | { box: { x0: number; y0: number; x1: number; y1: number } };
+/** Aperçu d'une sélection (gomme magique) : instantané, rien n'est encore enregistré. */
+export interface SegmentResult { selectionId: string; overlayUrl: string }
+/** Sélection confirmée : la photo normalisée et le masque, entrées du job ERASE. */
+export interface CommittedSelection { imageAssetId: string; maskAssetId: string }
 export interface PackView { id: string; credits: number; price: number; currency: string }
 
 export type Fetcher = typeof fetch;
@@ -66,9 +73,19 @@ export function createApi(opts: { baseUrl: string; getToken: () => string | null
       if (!res.ok) throw new ApiError(res.status, "UploadFailed", "L'envoi de la photo a échoué");
     },
 
+    /** Préchauffe l'analyse de la photo juste après son envoi (au mieux : le résultat est ignoré). */
+    prepare: (assetId: string) => call<void>("POST", `/assets/${encodeURIComponent(assetId)}/prepare`),
+    /** Gomme magique : l'objet sous le clic (x, y normalisés 0..1) est sélectionné et prévisualisé. */
+    segment: (assetId: string, target: SegmentTarget) => call<SegmentResult>("POST", `/assets/${encodeURIComponent(assetId)}/segment`, target),
+    /** Confirme la sélection (envoie la photo normalisée et le masque au stockage). */
+    commitSelection: (assetId: string, selectionId: string) =>
+      call<CommittedSelection>("POST", `/assets/${encodeURIComponent(assetId)}/selection`, { selectionId }),
+    /** Fait du résultat d'un job une photo réutilisable (ex. gommer un autre objet dessus). */
+    jobAsAsset: (jobId: string) => call<{ assetId: string; url: string }>("POST", `/jobs/${encodeURIComponent(jobId)}/asset`),
+
     styles: () => call<StyleView[]>("GET", "/styles"),
-    createJob: (input: { type: JobType; styleId?: string; inputAssetIds: string[] }) =>
-      call<{ jobId: string; status: JobStatus }>("POST", "/jobs", input, idem()),
+    createJob: (input: { type: JobType; styleId?: string; prompt?: string; inputAssetIds?: string[]; fromJobId?: string }) =>
+      call<{ jobId: string; status: JobStatus }>("POST", "/jobs", { inputAssetIds: [], ...input }, idem()),
     getJob: (id: string) => call<JobView>("GET", `/jobs/${encodeURIComponent(id)}`),
     listJobs: (cursor?: string, limit = 20) =>
       call<JobPage>("GET", `/jobs?limit=${limit}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`),
@@ -86,12 +103,18 @@ export type Api = ReturnType<typeof createApi>;
 /** Message lisible pour l'utilisateur. */
 export function errorMessage(e: unknown): string {
   if (e instanceof ApiError) {
+    switch (e.code) {
+      case "NoObjectFound": return "Aucun objet détecté ici. Visez le centre de l'objet à enlever, pas le fond.";
+      case "InvalidImage": return "Cette photo ne peut pas être analysée (format ou taille non supportés). Essayez un JPEG ou un PNG plus léger.";
+      case "SelectionExpired": return "La sélection a expiré. Touchez à nouveau l'objet.";
+    }
     switch (e.status) {
       case 402: return "Crédits insuffisants.";
       case 403: return "Vous devez confirmer avoir plus de 18 ans.";
       case 401: return e.code === "InvalidCredentials" ? "Email ou mot de passe incorrect." : "Session expirée, reconnectez-vous.";
       case 409: return e.code === "EmailAlreadyUsed" ? "Un compte existe déjà avec cet email." : "Conflit, réessayez.";
       case 429: return "Trop de tentatives, réessayez dans un instant.";
+      case 422: return e.code === "NoObjectFound" ? "Aucun objet détecté ici. Touchez bien au centre de l'objet à enlever, pas sur le fond." : "Cette image ne peut pas être traitée.";
       case 400: return e.code === "WeakPassword" ? "Mot de passe trop court (8 caractères minimum)." : e.code === "InvalidEmail" ? "Adresse email invalide." : "Informations invalides, vérifiez le formulaire.";
     }
     return e.message || "Une erreur est survenue.";
@@ -102,4 +125,6 @@ export function errorMessage(e: unknown): string {
 export const REJECTION_MESSAGES: Record<string, string> = {
   moderation_input: "Cette photo a été refusée par notre modération. Aucun crédit n'a été débité.",
   moderation_output: "Le résultat n'a pas pu être livré (modération). Aucun crédit n'a été débité.",
+  provider_content_flagged:
+    "Le service d'IA a jugé la photo ou la demande sensible et a refusé de la traiter. Reformulez avec une instruction plus simple (une modification à la fois) ou essayez une autre photo. Aucun crédit n'a été débité.",
 };

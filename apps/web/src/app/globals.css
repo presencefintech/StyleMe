@@ -2,5 +2,51 @@
 @tailwind components;
 @tailwind utilities;
 
-html { color-scheme: dark; }
-body { @apply bg-bg font-sans text-body text-ink antialiased; }
+/* Thème clair « studio » (défaut). Valeurs RGB sans virgule pour supporter l'opacité Tailwind (bg-primary/20). */
+:root {
+  --bg: 250 247 242;
+  --surface: 255 255 255;
+  --alt: 243 239 232;
+  --ink: 27 26 46;
+  --muted: 107 106 128;
+  --line: 229 224 215;
+  --primary: 108 76 224;
+  --primary-dark: 75 50 168;
+  --accent: 224 161 0;
+  --accent-ink: 138 90 0;
+  --coral: 255 107 107;
+  --success: 22 163 74;
+  --warning: 217 119 6;
+  --danger: 220 38 38;
+  --shadow: 27 26 46;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: 14 16 32;
+    --surface: 26 29 51;
+    --alt: 36 40 69;
+    --ink: 245 246 251;
+    --muted: 167 173 201;
+    --line: 46 51 80;
+    --accent: 242 183 5;
+    --accent-ink: 242 183 5;
+    --success: 47 191 113;
+    --warning: 242 183 5;
+    --danger: 255 84 112;
+    --shadow: 0 0 0;
+    color-scheme: dark;
+  }
+}
+
+html { scroll-behavior: smooth; }
+body {
+  @apply bg-bg font-sans text-body text-ink antialiased;
+  min-height: 100vh;
+}
+::selection { background: rgb(var(--primary) / 0.3); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+}

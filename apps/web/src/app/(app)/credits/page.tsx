@@ -50,8 +50,8 @@ export default function CreditsPage() {
       </div>
 
       <div className="grid grid-cols-2 gap-md sm:grid-cols-3">
-        {packs.data?.map((p) => (
-          <CreditPackCard key={p.id} credits={p.credits} price={p.price} currency={p.currency} selected={packId === p.id} onSelect={() => setPackId(p.id)} />
+        {packs.data?.map((p, i) => (
+          <CreditPackCard key={p.id} credits={p.credits} price={p.price} currency={p.currency} selected={packId === p.id} popular={i === 1} onSelect={() => setPackId(p.id)} />
         ))}
       </div>
 

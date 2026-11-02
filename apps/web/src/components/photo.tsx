@@ -28,13 +28,13 @@ export function PhotoPicker({ file, onPick, disabled }: { file: File | null; onP
     <div>
       <label
         htmlFor={id}
-        className="flex min-h-56 cursor-pointer flex-col items-center justify-center gap-sm overflow-hidden rounded-lg border-2 border-dashed border-line bg-bg-surface text-center transition hover:border-primary focus-within:border-primary"
+        className="flex min-h-64 cursor-pointer flex-col items-center justify-center gap-sm overflow-hidden rounded-xl border-2 border-dashed border-line bg-bg-surface p-lg text-center shadow-card transition hover:border-primary hover:bg-primary/5 focus-within:border-primary"
       >
         {preview ? (
           <img src={preview} alt="Aperçu de votre photo" className="max-h-80 w-full object-contain" />
         ) : (
           <>
-            <span aria-hidden className="text-display">📷</span>
+            <span aria-hidden className="grid h-14 w-14 place-items-center rounded-pill bg-primary/10 text-display text-primary">＋</span>
             <span className="text-body font-semibold text-ink">Choisir une photo</span>
             <span className="text-caption text-ink-muted">JPEG, PNG ou WebP · 10 Mo max · un seul visage, adulte</span>
           </>
@@ -63,15 +63,16 @@ export function PhotoPicker({ file, onPick, disabled }: { file: File | null; onP
 /** Avant/après : curseur de comparaison accessible (input range). */
 export function ResultViewer({ before, after }: { before: string | null; after: string }) {
   const [pos, setPos] = useState(50);
-  if (!before) {
-    return <img src={after} alt="Résultat" className="w-full rounded-lg bg-bg-alt object-contain" />;
+  const [beforeBroken, setBeforeBroken] = useState(false); // URL signée expirée : on n'affiche que le résultat
+  if (!before || beforeBroken) {
+    return <img src={after} alt="Résultat" className="w-full rounded-xl bg-bg-alt object-contain shadow-card" />;
   }
   return (
     <div>
-      <div className="relative overflow-hidden rounded-lg bg-bg-alt">
+      <div className="relative overflow-hidden rounded-xl bg-bg-alt shadow-card">
         <img src={after} alt="Après" className="block w-full object-contain" />
         <div className="absolute inset-0" style={{ clipPath: `inset(0 ${100 - pos}% 0 0)` }}>
-          <img src={before} alt="Avant" className="h-full w-full object-contain" />
+          <img src={before} alt="Avant" onError={() => setBeforeBroken(true)} className="h-full w-full object-contain" />
         </div>
         <div aria-hidden className="absolute inset-y-0 w-0.5 bg-ink" style={{ left: `${pos}%` }} />
       </div>
