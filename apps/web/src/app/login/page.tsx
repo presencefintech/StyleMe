@@ -58,8 +58,8 @@ export default function LoginPage() {
       <div className="relative mx-auto grid min-h-screen max-w-6xl items-center gap-3xl px-lg py-2xl lg:grid-cols-[1.1fr_0.9fr]">
         <section>
           <Logo />
-          <h1 className="mt-3xl font-display text-hero font-semibold text-ink">
-            Chaque occasion mérite sa <em className="text-primary">plus belle photo</em>.
+          <h1 className="mt-3xl font-display text-hero font-extrabold uppercase text-ink">
+            Chaque occasion mérite sa <em className="bg-accent px-2 not-italic">plus belle photo</em>.
           </h1>
           <p className="mt-lg max-w-lg text-h2 text-ink-muted">
             Envoyez un portrait. StyleMe le détoure, le place dans le décor de l'occasion, et vous laisse le retoucher en une phrase.
@@ -68,7 +68,7 @@ export default function LoginPage() {
           <ul className="mt-2xl space-y-lg">
             {BENEFITS.map((b) => (
               <li key={b.title} className="flex gap-md">
-                <span aria-hidden className="w-8 shrink-0 font-display text-h2 font-semibold text-primary">{b.n}</span>
+                <span aria-hidden className="w-8 shrink-0 font-display text-h2 font-extrabold text-ink">{b.n}</span>
                 <div>
                   <p className="font-semibold text-ink">{b.title}</p>
                   <p className="text-caption text-ink-muted">{b.text}</p>
@@ -108,14 +108,14 @@ export default function LoginPage() {
             {!isLogin && (
               <p className="text-center text-tiny text-ink-muted">
                 En créant un compte, vous acceptez les{" "}
-                <Link href="/legal/terms" className="font-semibold text-primary underline-offset-2 hover:underline">conditions d'utilisation</Link> et la{" "}
-                <Link href="/legal/privacy" className="font-semibold text-primary underline-offset-2 hover:underline">politique de confidentialité</Link>.
+                <Link href="/legal/terms" className="font-semibold text-primary underline decoration-accent decoration-2 underline-offset-2 hover:bg-accent">conditions d'utilisation</Link> et la{" "}
+                <Link href="/legal/privacy" className="font-semibold text-primary underline decoration-accent decoration-2 underline-offset-2 hover:bg-accent">politique de confidentialité</Link>.
               </p>
             )}
           </form>
           <p className="mt-lg text-center text-caption text-ink-muted">
             {isLogin ? "Pas encore de compte ?" : "Déjà un compte ?"}{" "}
-            <button type="button" onClick={() => { setMode(isLogin ? "register" : "login"); setError(null); }} className="font-semibold text-primary underline-offset-2 hover:underline">
+            <button type="button" onClick={() => { setMode(isLogin ? "register" : "login"); setError(null); }} className="font-semibold text-primary underline decoration-accent decoration-2 underline-offset-2 hover:bg-accent">
               {isLogin ? "Créer un compte" : "Se connecter"}
             </button>
           </p>

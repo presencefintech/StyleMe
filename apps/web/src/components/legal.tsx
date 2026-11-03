@@ -13,9 +13,9 @@ export function LegalPage({ title, children }: { title: string; children: ReactN
     <main className="mx-auto w-full max-w-3xl px-lg pb-3xl pt-xl">
       <header className="flex items-center justify-between gap-md">
         <Logo />
-        <Link href="/login" className="text-caption font-semibold text-primary underline-offset-2 hover:underline">Retour à l'application</Link>
+        <Link href="/login" className="text-caption font-semibold text-primary underline decoration-accent decoration-2 underline-offset-2 hover:bg-accent">Retour à l'application</Link>
       </header>
-      <h1 className="mt-2xl font-display text-display font-semibold text-ink">{title}</h1>
+      <h1 className="mt-2xl font-display text-display font-extrabold uppercase tracking-tight text-ink">{title}</h1>
       <p className="mt-sm text-caption text-ink-muted">Dernière mise à jour : {LEGAL_UPDATED}</p>
       <div className="mt-xl space-y-lg text-body text-ink">{children}</div>
       <footer className="mt-3xl flex flex-wrap gap-lg border-t border-line pt-lg text-caption text-ink-muted">

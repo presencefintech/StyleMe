@@ -58,11 +58,11 @@ export default function PrivacyPage() {
       <Section title="Vos droits">
         <p className="text-ink-muted">
           Vous pouvez supprimer votre compte et toutes vos photos à tout moment depuis la page{" "}
-          <Link href="/account" className="font-semibold text-primary underline-offset-2 hover:underline">Mon compte</Link>.
+          <Link href="/account" className="font-semibold text-primary underline decoration-accent decoration-2 underline-offset-2 hover:bg-accent">Mon compte</Link>.
           Pour consulter ou corriger vos données, ou pour toute question, écrivez-nous
           {CONTACT_EMAIL ? (
             <>
-              {" "}à <a href={`mailto:${CONTACT_EMAIL}`} className="font-semibold text-primary underline-offset-2 hover:underline">{CONTACT_EMAIL}</a>.
+              {" "}à <a href={`mailto:${CONTACT_EMAIL}`} className="font-semibold text-primary underline decoration-accent decoration-2 underline-offset-2 hover:bg-accent">{CONTACT_EMAIL}</a>.
             </>
           ) : (
             "."

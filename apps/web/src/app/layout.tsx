@@ -1,12 +1,12 @@
 import type { Metadata, Viewport } from "next";
-import { Inter, Playfair_Display } from "next/font/google";
+import { Bricolage_Grotesque, Inter } from "next/font/google";
 import type { ReactNode } from "react";
 import { RegisterServiceWorker } from "@/components/pwa";
 import { Providers } from "@/lib/providers";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
-const display = Playfair_Display({ subsets: ["latin"], variable: "--font-display", weight: ["500", "600", "700"] });
+const display = Bricolage_Grotesque({ subsets: ["latin"], variable: "--font-display", weight: ["600", "700", "800"] });
 
 export const metadata: Metadata = {
   title: "StyleMe",
@@ -17,7 +17,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#F4EEE4",
+  themeColor: "#F6F6F3",
   viewportFit: "cover",
 };
 

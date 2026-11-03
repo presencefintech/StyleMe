@@ -49,7 +49,7 @@ function AgeGate() {
 }
 
 const SIDE_LINK = "flex items-center gap-md px-md py-sm text-body transition";
-const ACTIVE_SIDE = "bg-bg font-semibold text-primary shadow-[inset_2px_0_0_rgb(var(--primary))]";
+const ACTIVE_SIDE = "bg-accent font-bold text-ink";
 const IDLE_SIDE = "font-medium text-ink-muted hover:bg-bg hover:text-ink";
 
 /** Navigation : barre latérale fixe sur ordinateur, en-tête compact + onglets en bas sur mobile. */
@@ -61,14 +61,14 @@ function Navigation() {
   return (
     <>
       {/* Ordinateur : barre latérale */}
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col border-r border-line bg-bg-alt px-lg py-xl md:flex">
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col border-r-2 border-ink bg-bg px-lg py-xl md:flex">
         <Logo />
 
-        <Link href="/credits" aria-label="Mes crédits" className="mt-xl block rounded-sm border border-line bg-bg px-md py-md transition hover:border-ink/40">
+        <Link href="/credits" aria-label="Mes crédits" className="mt-xl block border border-line bg-surface px-md py-md transition hover:border-ink">
           <span className="block text-tiny font-semibold uppercase tracking-[0.12em] text-ink-muted">Solde</span>
           <span className="mt-0.5 flex items-baseline justify-between">
-            <span className="font-display text-h1 font-semibold">{balance.data === undefined ? "…" : `${balance.data.balance} crédit${balance.data.balance > 1 ? "s" : ""}`}</span>
-            <span className="text-caption font-semibold text-primary underline">Recharger</span>
+            <span className="font-display text-h1 font-extrabold">{balance.data === undefined ? "…" : `${balance.data.balance} crédit${balance.data.balance > 1 ? "s" : ""}`}</span>
+            <span className="text-caption font-bold text-ink underline decoration-accent decoration-2 underline-offset-2">Recharger</span>
           </span>
         </Link>
 
@@ -106,7 +106,7 @@ function Navigation() {
           <Logo size={26} />
           <div className="flex items-center gap-sm">
             <Link href="/credits" aria-label="Mes crédits"><CreditBadge value={balance.data?.balance} /></Link>
-            <Link href="/account" aria-label="Mon compte" aria-current={isActive("/account") ? "page" : undefined} className={cx("grid h-10 w-10 place-items-center", isActive("/account") ? "text-primary" : "text-ink-muted hover:text-ink")}>
+            <Link href="/account" aria-label="Mon compte" aria-current={isActive("/account") ? "page" : undefined} className={cx("grid h-10 w-10 place-items-center", isActive("/account") ? "bg-accent text-ink" : "text-ink-muted hover:text-ink")}>
               <Icon name="account" />
             </Link>
             <button type="button" onClick={signOut} aria-label="Quitter" className="grid h-10 w-10 place-items-center text-ink-muted hover:text-ink">
@@ -117,7 +117,7 @@ function Navigation() {
       </header>
 
       {/* Mobile : barre d'onglets */}
-      <nav aria-label="Navigation mobile" className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-line bg-bg-alt pb-[env(safe-area-inset-bottom)] md:hidden">
+      <nav aria-label="Navigation mobile" className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t-2 border-ink bg-bg pb-[env(safe-area-inset-bottom)] md:hidden">
         {NAV.map((n) => {
           const active = isActive(n.href);
           return (
@@ -125,7 +125,7 @@ function Navigation() {
               key={n.href}
               href={n.href}
               aria-current={active ? "page" : undefined}
-              className={cx("flex flex-col items-center justify-center gap-1 py-sm text-tiny", active ? "font-semibold text-primary shadow-[inset_0_2px_0_rgb(var(--primary))]" : "font-medium text-ink-muted")}
+              className={cx("flex flex-col items-center justify-center gap-1 py-sm text-tiny", active ? "bg-accent font-bold text-ink" : "font-medium text-ink-muted")}
             >
               <Icon name={n.icon} size={22} />
               {n.label}

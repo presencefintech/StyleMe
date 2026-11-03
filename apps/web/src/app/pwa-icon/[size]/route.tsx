@@ -31,7 +31,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ size: s
           alignItems: "center",
           justifyContent: "center",
           background: BRAND.tile,
-          borderRadius: v.maskable ? 0 : Math.round(v.px * 0.22),
+          borderRadius: 0,
         }}
       >
         <svg width={glyph} height={glyph} viewBox="0 0 100 100">
@@ -39,7 +39,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ size: s
             <path d={BRAND.hook} />
             <path d={BRAND.hanger} />
           </g>
-          <circle cx={BRAND.dot.cx} cy={BRAND.dot.cy} r={BRAND.dot.r} fill={BRAND.terracotta} />
+          <circle cx={BRAND.dot.cx} cy={BRAND.dot.cy} r={BRAND.dot.r} fill={BRAND.accent} />
         </svg>
       </div>
     ),

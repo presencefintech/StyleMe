@@ -2,27 +2,28 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Thème « Atelier » : papier chaud, encre, terre cuite. Valeurs RGB sans virgule (opacité Tailwind : bg-primary/20). */
+/* Thème « Studio » : blanc cassé, noir, citron. Valeurs RGB sans virgule (opacité Tailwind : bg-accent/20).
+   primary = noir (boutons, sélections) ; accent = citron, toujours en FOND avec du texte noir (jamais en texte). */
 :root {
-  --bg: 244 238 228;        /* papier */
-  --surface: 250 246 238;   /* papier clair (champs, cartes) */
-  --alt: 239 231 218;       /* barre latérale, zones de repos */
-  --ink: 30 27 22;
-  --muted: 107 100 88;
-  --line: 216 204 185;
-  --primary: 180 71 43;     /* terre cuite */
-  --primary-dark: 140 52 30;
-  --accent: 36 73 59;       /* vert profond */
-  --accent-ink: 36 73 59;
-  --coral: 217 119 87;
-  --success: 36 120 80;
+  --bg: 246 246 243;
+  --surface: 255 255 255;
+  --alt: 237 237 233;
+  --ink: 11 11 12;
+  --muted: 106 106 110;
+  --line: 217 217 212;
+  --primary: 11 11 12;
+  --primary-dark: 0 0 0;
+  --accent: 204 242 46;
+  --accent-ink: 11 11 12;
+  --coral: 224 90 70;
+  --success: 22 120 70;
   --warning: 160 98 14;
-  --danger: 168 32 32;
-  --shadow: 30 27 22;
+  --danger: 200 32 32;
+  --shadow: 11 11 12;
   color-scheme: light;
 }
 
-/* Thème clair uniquement : le style « Atelier » est pensé sur papier. Pas de mode sombre automatique. */
+/* Thème clair uniquement : le style « Studio » est pensé sur fond clair. Pas de mode sombre automatique. */
 
 html { scroll-behavior: smooth; }
 body {

@@ -33,8 +33,8 @@ const config: Config = {
         tiny: ["0.6875rem", "0.9rem"],
       },
       spacing: { xs: "4px", sm: "8px", md: "12px", lg: "16px", xl: "24px", "2xl": "32px", "3xl": "48px" },
-      // Éditorial : angles presque droits. "pill" ne sert qu'aux pastilles rondes (points, spinners).
-      borderRadius: { sm: "2px", md: "3px", lg: "4px", xl: "6px", pill: "999px" },
+      // Studio : angles droits. "pill" ne sert qu'aux pastilles rondes (points, spinners).
+      borderRadius: { sm: "0px", md: "0px", lg: "0px", xl: "0px", pill: "999px" },
       boxShadow: {
         // Pas d'ombres décoratives : la hiérarchie vient des filets et de l'espace.
         card: "none",

@@ -52,7 +52,7 @@ export default function TermsPage() {
       <Section title="Vos photos">
         <p className="text-ink-muted">
           Vos photos et vos résultats restent les vôtres. Vous nous autorisez seulement à les traiter pour vous fournir le service. Elles sont supprimées automatiquement au bout de quelques jours, comme expliqué dans la{" "}
-          <Link href="/legal/privacy" className="font-semibold text-primary underline-offset-2 hover:underline">politique de confidentialité</Link>.
+          <Link href="/legal/privacy" className="font-semibold text-primary underline decoration-accent decoration-2 underline-offset-2 hover:bg-accent">politique de confidentialité</Link>.
         </p>
       </Section>
 
@@ -66,7 +66,7 @@ export default function TermsPage() {
         <p className="text-ink-muted">
           {CONTACT_EMAIL ? (
             <>
-              Une question ? Écrivez à <a href={`mailto:${CONTACT_EMAIL}`} className="font-semibold text-primary underline-offset-2 hover:underline">{CONTACT_EMAIL}</a>.
+              Une question ? Écrivez à <a href={`mailto:${CONTACT_EMAIL}`} className="font-semibold text-primary underline decoration-accent decoration-2 underline-offset-2 hover:bg-accent">{CONTACT_EMAIL}</a>.
             </>
           ) : (
             "Une question ? Contactez-nous via les coordonnées indiquées lors de votre inscription."

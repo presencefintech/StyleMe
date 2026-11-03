@@ -40,9 +40,9 @@ export default function AccountPage() {
           <strong className="text-ink">{RESULT_RETENTION_DAYS} jours</strong>. Pensez à télécharger ce que vous voulez garder.
         </p>
         <p className="text-caption text-ink-muted">
-          <Link href="/legal/privacy" className="font-semibold text-primary underline-offset-2 hover:underline">Confidentialité</Link>
+          <Link href="/legal/privacy" className="font-semibold text-primary underline decoration-accent decoration-2 underline-offset-2 hover:bg-accent">Confidentialité</Link>
           {" · "}
-          <Link href="/legal/terms" className="font-semibold text-primary underline-offset-2 hover:underline">Conditions d'utilisation</Link>
+          <Link href="/legal/terms" className="font-semibold text-primary underline decoration-accent decoration-2 underline-offset-2 hover:bg-accent">Conditions d'utilisation</Link>
         </p>
       </Card>
 

@@ -13,7 +13,7 @@ const FOCUS = "focus-visible:outline focus-visible:outline-2 focus-visible:outli
 
 type Variant = "primary" | "secondary" | "ghost";
 const VARIANTS: Record<Variant, string> = {
-  primary: "bg-ink text-bg hover:bg-ink/85 active:translate-y-px",
+  primary: "bg-ink font-display font-bold uppercase tracking-[0.05em] text-bg hover:bg-ink/85 active:translate-y-px",
   secondary: "border border-ink/70 bg-transparent text-ink hover:bg-bg-alt",
   ghost: "bg-transparent text-ink-muted hover:text-ink",
 };
@@ -67,8 +67,8 @@ export function Screen({
 }) {
   return (
     <section className={cx("mx-auto w-full max-w-3xl px-lg", compact ? "pb-xl pt-lg" : "pb-3xl pt-2xl sm:pt-3xl")}>
-      {eyebrow && !compact && <p className="mb-sm text-caption font-semibold uppercase tracking-[0.18em] text-primary">{eyebrow}</p>}
-      <h1 className={cx("font-display font-semibold text-ink", compact ? "text-h1" : "text-display sm:text-[3rem] sm:leading-[1.05]")}>{title}</h1>
+      {eyebrow && !compact && <p className="mb-sm text-caption font-bold uppercase tracking-[0.16em] text-ink-muted">{eyebrow}</p>}
+      <h1 className={cx("font-display font-extrabold uppercase tracking-tight text-ink", compact ? "text-h1" : "text-display sm:text-[3rem] sm:leading-[0.98]")}>{title}</h1>
       {subtitle && !compact && <p className="mt-md max-w-xl text-body text-ink-muted">{subtitle}</p>}
       <div className={cx("space-y-xl", compact ? "mt-lg space-y-md" : "mt-2xl")}>{children}</div>
     </section>
@@ -79,7 +79,7 @@ export function Screen({
 
 export function CreditBadge({ value }: { value: number | undefined }) {
   return (
-    <span className="inline-flex items-center whitespace-nowrap rounded-sm border border-ink/70 px-md py-xs text-caption font-medium text-ink">
+    <span className="inline-flex items-center whitespace-nowrap bg-accent px-md py-xs text-caption font-bold uppercase tracking-wide text-ink">
       {value === undefined ? "…" : `${value} crédit${value > 1 ? "s" : ""}`}
     </span>
   );
@@ -178,7 +178,7 @@ export function CreditPackCard({
       )}
     >
       {popular && (
-        <span className="absolute -top-3 left-lg rounded-sm bg-accent px-md py-0.5 text-tiny font-bold uppercase tracking-wide text-bg">Populaire</span>
+        <span className="absolute -top-3 left-lg bg-accent px-md py-0.5 text-tiny font-bold uppercase tracking-wide text-ink">Populaire</span>
       )}
       <div className="font-display text-display font-semibold text-ink">{credits}<span className="ml-xs text-caption font-sans font-medium text-ink-muted">crédits</span></div>
       <div className="mt-xs text-body font-semibold text-ink">{price} {currency}</div>

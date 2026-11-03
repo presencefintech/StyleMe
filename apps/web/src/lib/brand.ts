@@ -1,14 +1,14 @@
 /**
- * Identité visuelle de StyleMe : un cintre (l'habillage) et un point de terre cuite (le geste du couturier).
+ * Identité visuelle de StyleMe : un cintre (l'habillage) et un point citron (l'épingle du couturier).
  * Source unique du dessin : le logo de l'app, le favicon (app/icon.svg) et les icônes de l'app installable l'utilisent.
  * Toutes les coordonnées sont dans un carré de 100 x 100.
  */
 export const BRAND = {
   /** Fond de l'icône (encre) et trait du cintre (papier). Le logo dans l'app prend les couleurs du thème. */
-  tile: "#1E1B16",
-  paper: "#F4EEE4",
-  /** Terre cuite : même teinte que --primary du thème clair. */
-  terracotta: "#C9552F",
+  tile: "#0B0B0C",
+  paper: "#F6F6F3",
+  /** Citron : même teinte que --accent du thème. */
+  accent: "#CCF22E",
   /** Crochet du cintre. */
   hook: "M50 40 V33 A8.5 8.5 0 1 1 58.5 41.5",
   /** Corps du cintre. */
