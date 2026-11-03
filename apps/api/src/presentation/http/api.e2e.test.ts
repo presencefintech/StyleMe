@@ -1,6 +1,7 @@
 import "reflect-metadata";
 import type { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
+import { REFERRAL } from "@styleme/shared";
 import request from "supertest";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { RunEnhancementJob } from "../../application";
@@ -47,6 +48,40 @@ describe("auth", () => {
   });
 });
 
+describe("suppression de compte", () => {
+  it("exige le jeton et le bon mot de passe (403, pas 401 : le front ne doit pas déconnecter), puis efface fichiers et données", async () => {
+    const http = () => request(app.getHttpServer());
+    const { token, userId } = await login("partant@example.com");
+    await http().post(`${P}/auth/delete-account`).send({ password: "motdepasse1" }).expect(401);
+    await http().post(`${P}/auth/delete-account`).set(auth(token)).send({}).expect(400);
+
+    const wrong = await http().post(`${P}/auth/delete-account`).set(auth(token)).send({ password: "mauvais" }).expect(403);
+    expect(wrong.body.error).toBe("PasswordMismatch");
+    expect(fakes.accountData.erased).toEqual([]);
+
+    await http().post(`${P}/auth/delete-account`).set(auth(token)).send({ password: "motdepasse1" }).expect(204);
+    expect(fakes.accountData.erased).toEqual([userId]);
+    expect(fakes.storage.deletedPrefixes.map((d) => d.bucket).sort()).toEqual(["results", "selfies-training", "sources"]);
+    expect(fakes.storage.deletedPrefixes.every((d) => d.prefix === `${userId}/`)).toBe(true);
+  });
+});
+
+describe("parrainage", () => {
+  it("expose le code, puis crédite filleul et parrain à l'inscription avec ce code", async () => {
+    const http = () => request(app.getHttpServer());
+    const parrain = await login("parrain@example.com");
+    const info = await http().get(`${P}/credits/referral`).set(auth(parrain.token)).expect(200);
+    expect(info.body).toMatchObject({ referrals: 0, referrerBonus: REFERRAL.referrerBonus });
+    const signup = await http().post(`${P}/auth/register`).send({ email: "filleul@example.com", password: "motdepasse1", referralCode: info.body.code }).expect(201);
+    const filleulBal = await http().get(`${P}/credits/balance`).set(auth(signup.body.accessToken)).expect(200);
+    expect(filleulBal.body.balance).toBe(REFERRAL.signupBonus);
+    const parrainBal = await http().get(`${P}/credits/balance`).set(auth(parrain.token)).expect(200);
+    expect(parrainBal.body.balance).toBe(REFERRAL.signupBonus + REFERRAL.referrerBonus);
+    const after = await http().get(`${P}/credits/referral`).set(auth(parrain.token)).expect(200);
+    expect(after.body.referrals).toBe(1);
+  });
+});
+
 describe("parcours complet : upload → job → résultat", () => {
   it("crédite, crée un job, le traite et renvoie l'URL signée du résultat", async () => {
     const { token, userId } = await login();
@@ -59,7 +94,10 @@ describe("parcours complet : upload → job → résultat", () => {
 
     await request(app.getHttpServer()).post(`${P}/auth/confirm-age`).set(h).send({ confirmed: true }).expect(204);
 
-    // Pas de crédits → 402
+    // Le bonus d'inscription est offert ; une fois dépensé (ici retiré), plus de crédits → 402
+    const welcome = await request(app.getHttpServer()).get(`${P}/credits/balance`).set(h).expect(200);
+    expect(welcome.body.balance).toBe(REFERRAL.signupBonus);
+    await fakes.ledger.append({ userId, amount: -REFERRAL.signupBonus, reason: "test-drain" });
     await request(app.getHttpServer()).post(`${P}/jobs`).set(h).send({ type: "ENHANCE", inputAssetIds: [presign.body.assetId] }).expect(402);
 
     // Achat de crédits via webhook signé
@@ -84,6 +122,7 @@ describe("parcours complet : upload → job → résultat", () => {
     const got = await request(app.getHttpServer()).get(`${P}/jobs/${created.body.jobId}`).set(h).expect(200);
     expect(got.body.status).toBe("DONE");
     expect(got.body.outputs[0].url).toContain("/dl/results/");
+    expect(got.body.sourceUrl).toContain("/dl/sources/"); // photo d'origine pour le avant/après, même après rechargement
     const after = await request(app.getHttpServer()).get(`${P}/credits/balance`).set(h);
     expect(after.body.balance).toBe(4);
 

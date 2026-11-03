@@ -1,4 +1,4 @@
-import type { Operator } from "@styleme/shared";
+import type { GarmentCategory, Operator } from "@styleme/shared";
 import type { ImageRef } from "../value-objects/image-ref";
 
 export type ModerationResult = { approved: boolean; nsfwScore: number; minorRisk: boolean; faceCount: number };
@@ -29,6 +29,10 @@ export interface ObjectSelector {
   select(src: ImageRef, target: SegmentTarget): Promise<{ selectionId: string; overlayUrl: string }>;
   commit(src: ImageRef, selectionId: string): Promise<{ image: ImageRef; mask: ImageRef }>;
 }
+/** Essayage virtuel : habille la personne de la photo avec la tenue donnée (visage, pose et décor conservés). */
+export interface VirtualTryOn {
+  tryOn(person: ImageRef, garment: ImageRef, opts: { category: GarmentCategory; description?: string }): Promise<ImageRef>;
+}
 /** Gomme : remplit la zone masquee de maniere naturelle. */
 export interface ObjectEraser {
   erase(image: ImageRef, mask: ImageRef): Promise<ImageRef>;
@@ -43,6 +47,8 @@ export interface StorageService {
   presignDownload(ref: ImageRef, ttlSeconds?: number): Promise<{ url: string }>;
   put(ref: ImageRef, data: Uint8Array, contentType: string): Promise<void>;
   delete(ref: ImageRef): Promise<void>;
+  /** Supprime tous les fichiers dont la clé commence par `prefix` (ex. "<userId>/"). */
+  deletePrefix(bucket: string, prefix: string): Promise<void>;
 }
 export interface PushService {
   notifyJobReady(jobId: string): Promise<void>;

@@ -1,7 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
+import { REFERRAL } from "@styleme/shared";
 import { Logo } from "@/components/logo";
 import { Button, Card, ErrorNote, Field } from "@/components/ui";
 import { errorMessage } from "@/lib/api";
@@ -21,8 +23,15 @@ export default function LoginPage() {
   const [mode, setMode] = useState<"login" | "register">("register");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [referralCode, setReferralCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Lien de parrainage : /login?ref=CODE
+  useEffect(() => {
+    const ref = new URLSearchParams(window.location.search).get("ref");
+    if (ref) setReferralCode(ref.trim().toUpperCase());
+  }, []);
 
   useEffect(() => {
     if (auth.ready && auth.session) router.replace("/enhance");
@@ -33,7 +42,7 @@ export default function LoginPage() {
     setBusy(true);
     setError(null);
     try {
-      const { accessToken, user } = mode === "login" ? await api.login(email, password) : await api.register(email, password);
+      const { accessToken, user } = mode === "login" ? await api.login(email, password) : await api.register(email, password, referralCode.trim() || undefined);
       auth.signIn({ token: accessToken, user });
       router.replace("/enhance");
     } catch (err) {
@@ -81,7 +90,7 @@ export default function LoginPage() {
 
         <Card className="w-full max-w-md justify-self-center lg:justify-self-end">
           <h2 className="font-display text-h1 font-semibold">{isLogin ? "Content de vous revoir" : "Créez votre compte"}</h2>
-          <p className="mt-xs text-caption text-ink-muted">{isLogin ? "Connectez-vous pour continuer." : "Gratuit, en quelques secondes."}</p>
+          <p className="mt-xs text-caption text-ink-muted">{isLogin ? "Connectez-vous pour continuer." : `${REFERRAL.signupBonus} crédits offerts, en quelques secondes.`}</p>
           <form onSubmit={submit} className="mt-xl space-y-lg">
             <Field label="Email" type="email" autoComplete="email" placeholder="vous@exemple.com" value={email} onChange={(e) => setEmail(e.target.value)} required />
             <Field
@@ -94,8 +103,24 @@ export default function LoginPage() {
               onChange={(e) => setPassword(e.target.value)}
               required
             />
+            {!isLogin && (
+              <Field
+                label="Code de parrainage (facultatif)"
+                autoComplete="off"
+                maxLength={32}
+                value={referralCode}
+                onChange={(e) => setReferralCode(e.target.value.toUpperCase())}
+              />
+            )}
             <ErrorNote message={error} />
             <Button type="submit" loading={busy} className="w-full">{isLogin ? "Se connecter" : "Créer mon compte"}</Button>
+            {!isLogin && (
+              <p className="text-center text-tiny text-ink-muted">
+                En créant un compte, vous acceptez les{" "}
+                <Link href="/legal/terms" className="font-semibold text-primary underline-offset-2 hover:underline">conditions d'utilisation</Link> et la{" "}
+                <Link href="/legal/privacy" className="font-semibold text-primary underline-offset-2 hover:underline">politique de confidentialité</Link>.
+              </p>
+            )}
           </form>
           <p className="mt-lg text-center text-caption text-ink-muted">
             {isLogin ? "Pas encore de compte ?" : "Déjà un compte ?"}{" "}

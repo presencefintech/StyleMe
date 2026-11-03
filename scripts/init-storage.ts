@@ -1,7 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 
 /** Crée les buckets PRIVÉS de StyleMe (idempotent). Usage : tsx --env-file=.env scripts/init-storage.ts */
-const BUCKETS = ["sources", "results", "selfies-training"];
+const BUCKETS = ["sources", "results", "selfies-training", "garments"];
 
 async function main() {
   const url = process.env.SUPABASE_URL;

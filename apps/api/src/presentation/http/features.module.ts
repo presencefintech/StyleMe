@@ -20,6 +20,7 @@ import type { Request } from "express";
 import {
   CREDIT_PACKS,
   ConfirmAgeDto,
+  DeleteAccountDto,
   CreateJobDto,
   InitiatePaymentDto,
   CommitSelectionDto,
@@ -30,12 +31,15 @@ import {
 } from "@styleme/shared";
 import {
   ConfirmAge,
+  DeleteAccount,
   CreateJob,
   GetCreditBalance,
+  GetReferralInfo,
   GetJob,
   GetPayment,
   HandlePaymentWebhook,
   InitiatePayment,
+  ListGarments,
   ListStyles,
   ListUserJobs,
   CommitSelection,
@@ -66,7 +70,17 @@ class AuthController {
     @Inject(Register) private readonly register: Register,
     @Inject(Login) private readonly login: Login,
     @Inject(ConfirmAge) private readonly confirmAge: ConfirmAge,
+    @Inject(DeleteAccount) private readonly deleteAccount: DeleteAccount,
   ) {}
+
+  /** Droit à l'effacement : supprime les photos et anonymise le compte. Le mot de passe est redemandé. */
+  @Post("delete-account")
+  @HttpCode(204)
+  @UseGuards(JwtGuard)
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  async remove(@CurrentUser() user: AuthUser, @Body() body: unknown) {
+    unwrap(await this.deleteAccount.execute({ userId: user.id, password: parseBody(DeleteAccountDto, body).password }));
+  }
 
   @Post("register")
   @HttpCode(201)
@@ -97,9 +111,10 @@ class AuthController {
   controllers: [AuthController],
   providers: [
     JwtGuard,
-    useCase(Register, [T.USERS, T.PASSWORD, T.TOKEN_ISSUER, T.IDS]),
+    useCase(Register, [T.USERS, T.PASSWORD, T.TOKEN_ISSUER, T.IDS, T.LEDGER]),
     useCase(Login, [T.USERS, T.PASSWORD, T.TOKEN_ISSUER]),
     useCase(ConfirmAge, [T.USERS, T.CLOCK]),
+    useCase(DeleteAccount, [T.USERS, T.PASSWORD, T.STORAGE, T.ACCOUNT_DATA, T.CLOCK]),
   ],
 })
 export class AuthModule {}
@@ -111,6 +126,7 @@ class AssetsController {
   constructor(
     @Inject(PresignAsset) private readonly presign: PresignAsset,
     @Inject(ListStyles) private readonly listStyles: ListStyles,
+    @Inject(ListGarments) private readonly listGarments: ListGarments,
     @Inject(SegmentObject) private readonly segmentObject: SegmentObject,
     @Inject(PrepareObject) private readonly prepareObject: PrepareObject,
     @Inject(CommitSelection) private readonly commitSelection: CommitSelection,
@@ -157,11 +173,18 @@ class AssetsController {
   async styles() {
     return unwrap(await this.listStyles.execute());
   }
+
+  /** Catalogue des tenues pour l'essayage virtuel (miniatures signées). */
+  @Get("garments")
+  @UseGuards(JwtGuard)
+  async garments() {
+    return unwrap(await this.listGarments.execute());
+  }
 }
 
 @Module({
   controllers: [AssetsController],
-  providers: [JwtGuard, useCase(PresignAsset, [T.ASSETS, T.STORAGE, T.IDS, T.CLOCK]), useCase(ListStyles, [T.STYLES]), useCase(SegmentObject, [T.USERS, T.ASSETS, T.SELECTOR]), useCase(PrepareObject, [T.USERS, T.ASSETS, T.SELECTOR]), useCase(CommitSelection, [T.USERS, T.ASSETS, T.SELECTOR, T.IDS])],
+  providers: [JwtGuard, useCase(PresignAsset, [T.ASSETS, T.STORAGE, T.IDS, T.CLOCK]), useCase(ListStyles, [T.STYLES]), useCase(ListGarments, [T.GARMENTS, T.STORAGE]), useCase(SegmentObject, [T.USERS, T.ASSETS, T.SELECTOR]), useCase(PrepareObject, [T.USERS, T.ASSETS, T.SELECTOR]), useCase(CommitSelection, [T.USERS, T.ASSETS, T.SELECTOR, T.IDS])],
 })
 export class AssetsModule {}
 
@@ -195,8 +218,8 @@ class JobsController {
 
   @Get(":id")
   async get(@CurrentUser() user: AuthUser, @Param("id") id: string) {
-    const { job, outputUrls } = unwrap(await this.getJob.execute({ userId: user.id, jobId: id }));
-    return jobView(job, outputUrls);
+    const { job, outputUrls, sourceUrl } = unwrap(await this.getJob.execute({ userId: user.id, jobId: id }));
+    return jobView(job, outputUrls, sourceUrl);
   }
 
   @Get()
@@ -213,8 +236,8 @@ class JobsController {
   providers: [
     JwtGuard,
     IdempotencyInterceptor,
-    useCase(CreateJob, [T.USERS, T.JOBS, T.LEDGER, T.ASSETS, T.QUEUE, T.IDS]),
-    useCase(GetJob, [T.JOBS, T.STORAGE]),
+    useCase(CreateJob, [T.USERS, T.JOBS, T.LEDGER, T.ASSETS, T.QUEUE, T.IDS, T.GARMENTS]),
+    useCase(GetJob, [T.JOBS, T.STORAGE, T.ASSETS]),
     useCase(ListUserJobs, [T.JOBS]),
     useCase(GetJobResultAsset, [T.JOBS, T.ASSETS, T.STORAGE, T.IDS]),
   ],
@@ -226,11 +249,19 @@ export class JobsModule {}
 @Controller("credits")
 @UseGuards(JwtGuard)
 class CreditsController {
-  constructor(@Inject(GetCreditBalance) private readonly balance: GetCreditBalance) {}
+  constructor(
+    @Inject(GetCreditBalance) private readonly balance: GetCreditBalance,
+    @Inject(GetReferralInfo) private readonly referral: GetReferralInfo,
+  ) {}
 
   @Get("balance")
   async getBalance(@CurrentUser() user: AuthUser) {
     return { balance: unwrap(await this.balance.execute(user.id)) };
+  }
+
+  @Get("referral")
+  async getReferral(@CurrentUser() user: AuthUser) {
+    return unwrap(await this.referral.execute(user.id));
   }
 
   @Get("packs")
@@ -239,7 +270,7 @@ class CreditsController {
   }
 }
 
-@Module({ controllers: [CreditsController], providers: [JwtGuard, useCase(GetCreditBalance, [T.LEDGER])] })
+@Module({ controllers: [CreditsController], providers: [JwtGuard, useCase(GetCreditBalance, [T.LEDGER]), useCase(GetReferralInfo, [T.USERS])] })
 export class CreditsModule {}
 
 // --- Payments ---------------------------------------------------------------------------

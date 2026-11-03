@@ -1,7 +1,10 @@
 import type {
+  AccountDataRepository,
   AssetRecord,
   AssetRepository,
   CreditLedgerRepository,
+  GarmentRecord,
+  GarmentRepository,
   JobRepository,
   Page,
   PageRequest,
@@ -25,6 +28,7 @@ export class PrismaJobRepository implements JobRepository {
       userId: job.userId,
       type: job.type,
       styleId: job.styleId ?? null,
+      garmentId: job.garmentId ?? null,
       prompt: job.prompt ?? null,
       creditCost: job.creditCost.value,
       status: job.status,
@@ -50,14 +54,30 @@ export class PrismaJobRepository implements JobRepository {
     const items = rows.slice(0, page.limit).map(toJob);
     return { items, nextCursor: rows.length > page.limit ? (items[items.length - 1]?.id ?? null) : null };
   }
+
+  async listFinishedBefore(before: Date, limit: number) {
+    const rows = await this.prisma.db.job.findMany({
+      where: { createdAt: { lt: before }, status: { in: ["DONE", "FAILED", "REJECTED"] } },
+      orderBy: { createdAt: "asc" },
+      take: limit,
+    });
+    return rows.map(toJob);
+  }
+
+  async deleteMany(ids: string[]) {
+    await this.prisma.root.$transaction([
+      this.prisma.root.moderationLog.deleteMany({ where: { jobId: { in: ids } } }),
+      this.prisma.root.job.deleteMany({ where: { id: { in: ids } } }),
+    ]);
+  }
 }
 
 function toJob(r: {
-  id: string; userId: string; type: "ENHANCE" | "PHOTOSHOOT" | "EDIT" | "ERASE"; styleId: string | null; prompt: string | null; creditCost: number;
+  id: string; userId: string; type: "ENHANCE" | "PHOTOSHOOT" | "EDIT" | "ERASE" | "TRYON"; styleId: string | null; garmentId: string | null; prompt: string | null; creditCost: number;
   status: "PENDING" | "PROCESSING" | "DONE" | "REJECTED" | "FAILED"; inputAssetIds: string[]; outputAssetIds: string[]; errorReason: string | null; createdAt: Date;
 }): Job {
   return Job.restore({
-    id: r.id, userId: r.userId, type: r.type, styleId: r.styleId ?? undefined, prompt: r.prompt ?? undefined, creditCost: CreditAmount.of(r.creditCost),
+    id: r.id, userId: r.userId, type: r.type, styleId: r.styleId ?? undefined, garmentId: r.garmentId ?? undefined, prompt: r.prompt ?? undefined, creditCost: CreditAmount.of(r.creditCost),
     status: r.status, inputAssetIds: r.inputAssetIds, outputAssetIds: r.outputAssetIds, errorReason: r.errorReason ?? undefined, createdAt: r.createdAt,
   });
 }
@@ -107,22 +127,56 @@ export class PrismaUserRepository implements UserRepository {
   async save(u: User) {
     await this.prisma.db.user.upsert({
       where: { id: u.id },
-      create: { id: u.id, email: u.email.value, passwordHash: u.passwordHash, ageConfirmedAt: u.ageConfirmedAt ?? null },
+      create: {
+        id: u.id, email: u.email.value, passwordHash: u.passwordHash, ageConfirmedAt: u.ageConfirmedAt ?? null,
+        referralCode: u.referralCode, referredById: u.referredById ?? null,
+      },
       update: { ageConfirmedAt: u.ageConfirmedAt ?? null },
     });
   }
   async findById(id: string) {
-    const r = await this.prisma.db.user.findUnique({ where: { id } });
+    const r = await this.prisma.db.user.findFirst({ where: { id, deletedAt: null } });
     return r ? toUser(r) : null;
   }
   async findByEmail(email: string) {
-    const r = await this.prisma.db.user.findUnique({ where: { email } });
+    const r = await this.prisma.db.user.findFirst({ where: { email, deletedAt: null } });
     return r ? toUser(r) : null;
+  }
+  async findByReferralCode(code: string) {
+    const r = await this.prisma.db.user.findFirst({ where: { referralCode: code, deletedAt: null } });
+    return r ? toUser(r) : null;
+  }
+  async countReferrals(userId: string) {
+    return this.prisma.db.user.count({ where: { referredById: userId } });
   }
 }
 
-function toUser(r: { id: string; email: string; passwordHash: string; ageConfirmedAt: Date | null }): User {
-  return User.restore({ id: r.id, email: Email.of(r.email), passwordHash: r.passwordHash, ageConfirmedAt: r.ageConfirmedAt ?? undefined });
+/** Efface les données d'un compte en une transaction, et anonymise la ligne utilisateur (clés étrangères comptables conservées). */
+export class PrismaAccountDataRepository implements AccountDataRepository {
+  constructor(private readonly prisma: PrismaService) {}
+  async erase(userId: string, at: Date) {
+    const db = this.prisma.root;
+    await db.$transaction([
+      db.moderationLog.deleteMany({ where: { job: { userId } } }),
+      db.job.deleteMany({ where: { userId } }),
+      db.asset.deleteMany({ where: { userId } }),
+      db.idempotencyRecord.deleteMany({ where: { userId } }),
+      // Les paiements restent (obligation comptable), sans le numéro de téléphone.
+      db.payment.updateMany({ where: { userId }, data: { phone: "" } }),
+      db.user.update({
+        where: { id: userId },
+        // Email unique libéré ; "deleted" n'est pas un hash scrypt valide : aucune connexion possible.
+        data: { email: `deleted-${userId}@deleted.invalid`, passwordHash: "deleted", ageConfirmedAt: null, deletedAt: at },
+      }),
+    ]);
+  }
+}
+
+function toUser(r: { id: string; email: string; passwordHash: string; ageConfirmedAt: Date | null; referralCode: string; referredById: string | null }): User {
+  return User.restore({
+    id: r.id, email: Email.of(r.email), passwordHash: r.passwordHash, ageConfirmedAt: r.ageConfirmedAt ?? undefined,
+    referralCode: r.referralCode, referredById: r.referredById ?? undefined,
+  });
 }
 
 export class PrismaAssetRepository implements AssetRepository {
@@ -138,6 +192,33 @@ export class PrismaAssetRepository implements AssetRepository {
     const r = await this.prisma.db.asset.findFirst({ where: { bucket, key, deletedAt: null } });
     return r ? ({ id: r.id, userId: r.userId, kind: r.kind as AssetRecord["kind"], bucket: r.bucket, key: r.key } as AssetRecord) : null;
   }
+  async listExpired(kind: AssetRecord["kind"], before: Date, limit: number) {
+    const rows = await this.prisma.db.asset.findMany({
+      where: { kind, deletedAt: null, createdAt: { lt: before } },
+      orderBy: { createdAt: "asc" },
+      take: limit,
+    });
+    return rows.map((r): AssetRecord => ({ id: r.id, userId: r.userId, kind: r.kind as AssetRecord["kind"], bucket: r.bucket, key: r.key }));
+  }
+  async markDeleted(ids: string[], at: Date) {
+    await this.prisma.db.asset.updateMany({ where: { id: { in: ids } }, data: { deletedAt: at } });
+  }
+}
+
+export class PrismaGarmentRepository implements GarmentRepository {
+  constructor(private readonly prisma: PrismaService) {}
+  async listActive(): Promise<GarmentRecord[]> {
+    const rows = await this.prisma.db.garment.findMany({ where: { active: true }, orderBy: [{ category: "asc" }, { name: "asc" }] });
+    return rows.map(toGarment);
+  }
+  async findActiveById(id: string) {
+    const r = await this.prisma.db.garment.findFirst({ where: { id, active: true } });
+    return r ? toGarment(r) : null;
+  }
+}
+
+function toGarment(r: { id: string; name: string; category: GarmentRecord["category"]; description: string | null; bucket: string; key: string }): GarmentRecord {
+  return { id: r.id, name: r.name, category: r.category, description: r.description ?? undefined, bucket: r.bucket, key: r.key };
 }
 
 export class PrismaStyleRepository implements StyleRepository {

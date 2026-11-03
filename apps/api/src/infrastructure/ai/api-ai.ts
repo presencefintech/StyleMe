@@ -1,4 +1,5 @@
-import type { BackgroundService, ImageEditor, ImageEnhancer, ObjectEraser, ModerationResult, ModerationService, StorageService } from "../../domain/ports";
+import type { GarmentCategory } from "@styleme/shared";
+import type { BackgroundService, ImageEditor, ImageEnhancer, ObjectEraser, ModerationResult, ModerationService, StorageService, VirtualTryOn } from "../../domain/ports";
 import { ProviderRejectedContent } from "../../domain/errors";
 import type { ImageRef } from "../../domain/value-objects/image-ref";
 import type { Fetch } from "./local-ai";
@@ -113,9 +114,11 @@ async function runReplicate(
   input: Record<string, unknown>,
   pollMs: number,
   maxWaitMs: number,
+  /** Modèles communautaires : version épinglée (POST /v1/predictions). Les modèles officiels n'en ont pas besoin. */
+  version?: string,
 ): Promise<string> {
   const headers = { authorization: `Bearer ${token}`, "content-type": "application/json" };
-  const res = await fetcher(endpoint, { method: "POST", headers: { ...headers, prefer: "wait" }, body: JSON.stringify({ input }) });
+  const res = await fetcher(endpoint, { method: "POST", headers: { ...headers, prefer: "wait" }, body: JSON.stringify(version ? { version, input } : { input }) });
   if (!res.ok) throw new Error(`Replicate responded ${res.status}`);
   let p = (await res.json()) as ReplicatePrediction;
 
@@ -196,6 +199,55 @@ export class ReplicateEraser implements ObjectEraser {
     const ref = { bucket: RESULTS_BUCKET, key: `${image.key.split("/")[0] ?? "x"}/${this.newKey()}.${ext}` };
     await this.storage.put(ref, data, type);
     return ref;
+  }
+}
+
+/**
+ * Essayage virtuel via Replicate (IDM-VTON) : habille la personne de la photo avec la tenue, en gardant visage, pose et décor.
+ * Modèle communautaire : on épingle sa version pour que les résultats ne changent pas sans prévenir.
+ */
+export class ReplicateTryOn implements VirtualTryOn {
+  constructor(
+    private readonly token: string,
+    private readonly version: string,
+    private readonly storage: StorageService,
+    private readonly fetcher: Fetch = fetch,
+    private readonly newKey: () => string = () => crypto.randomUUID(),
+    private readonly pollMs = 2000,
+    private readonly maxWaitMs = 180_000,
+  ) {}
+
+  async tryOn(person: ImageRef, garment: ImageRef, opts: { category: GarmentCategory; description?: string }): Promise<ImageRef> {
+    const [human, garm] = await Promise.all([this.storage.presignDownload(person, 600), this.storage.presignDownload(garment, 600)]);
+    const outUrl = await runReplicate(
+      this.fetcher,
+      this.token,
+      "https://api.replicate.com/v1/predictions",
+      {
+        human_img: human.url,
+        garm_img: garm.url,
+        garment_des: opts.description ?? "garment",
+        category: REPLICATE_CATEGORY[opts.category],
+        crop: true, // les photos des utilisateurs ne sont pas toutes en 3:4
+        steps: 30,
+      },
+      this.pollMs,
+      this.maxWaitMs,
+      this.version,
+    );
+    const { ext, type } = extOf(outUrl);
+    const data = await download(this.fetcher, outUrl);
+    const ref = { bucket: RESULTS_BUCKET, key: `${person.key.split("/")[0] ?? "x"}/${this.newKey()}.${ext}` };
+    await this.storage.put(ref, data, type);
+    return ref;
+  }
+}
+
+const REPLICATE_CATEGORY: Record<GarmentCategory, string> = { UPPER_BODY: "upper_body", LOWER_BODY: "lower_body", DRESSES: "dresses" };
+
+export class UnconfiguredTryOn implements VirtualTryOn {
+  async tryOn(): Promise<ImageRef> {
+    throw new Error("Essayage non configuré : définir REPLICATE_TOKEN sur l'API");
   }
 }
 

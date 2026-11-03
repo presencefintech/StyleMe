@@ -5,7 +5,7 @@ import { JOB_BASE_COST, MAX_PROMPT_LENGTH, type JobStatus } from "@styleme/share
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { use, useEffect, useState } from "react";
-import { ResultViewer } from "@/components/photo";
+import { ResultActions, ResultViewer } from "@/components/photo";
 import { Button, Card, Chip, ErrorNote, INPUT_CLASS, JobStatusPill, Screen } from "@/components/ui";
 import { ApiError, REJECTION_MESSAGES, errorMessage } from "@/lib/api";
 import { useApi } from "@/lib/providers";
@@ -145,10 +145,8 @@ export default function JobPage({ params }: { params: Promise<{ id: string }> })
 
       {j.status === "DONE" && output && (
         <>
-          <ResultViewer before={before} after={output} />
-          <a href={output} download="styleme.png" className="inline-flex min-h-11 items-center rounded-pill bg-signature px-xl font-semibold text-white shadow-glow">
-            Télécharger
-          </a>
+          <ResultViewer before={before ?? j.sourceUrl ?? null} after={output} />
+          <ResultActions url={output} />
           {j.type === "EDIT" && <ContinueEdit jobId={id} resultUrl={output} />}
           {j.type === "ERASE" && (
             <Card className="flex flex-wrap items-center justify-between gap-md">

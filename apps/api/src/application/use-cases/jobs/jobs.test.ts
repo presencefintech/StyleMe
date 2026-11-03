@@ -231,6 +231,23 @@ describe("RunEnhancementJob", () => {
     expect(s.jobs.items.get(custom.value.id)?.outputAssetIds[0]).toMatch(/.nobg.style-sans-consigne$/);
   });
 
+  it("upscaleResults : le résultat génératif est agrandi ; un échec de l'upscaler n'empêche pas la livraison", async () => {
+    const ok = await setup();
+    const upOn = new RunEnhancementJob(ok.jobs, ok.ledger, ok.assets, new FakeModeration(), new FakeEnhancer(), new FakeBackground(), ok.editor, ok.eraser, ok.uow, { upscaleResults: true });
+    const a = await ok.create.execute({ ...input, styleId: "mariage" });
+    if (!a.ok) throw new Error("setup");
+    expect((await upOn.execute(a.value.id)).ok).toBe(true);
+    expect(ok.jobs.items.get(a.value.id)?.outputAssetIds[0]).toMatch(/.edited.up$/);
+
+    const down = await setup();
+    const upDown = new RunEnhancementJob(down.jobs, down.ledger, down.assets, new FakeModeration(), new FakeEnhancer(new Error("upscaler down")), new FakeBackground(), down.editor, down.eraser, down.uow, { upscaleResults: true });
+    const b = await down.create.execute({ ...input, styleId: "mariage" });
+    if (!b.ok) throw new Error("setup");
+    expect((await upDown.execute(b.value.id)).ok).toBe(true);
+    expect(down.jobs.items.get(b.value.id)?.status).toBe("DONE");
+    expect(down.jobs.items.get(b.value.id)?.outputAssetIds[0]).toMatch(/.edited$/);
+  });
+
   it("modération entrée rejetée → REJECTED, 0 débit", async () => {
     const s = await setup({ moderation: { input: { approved: false } } });
     const id = await created(s);

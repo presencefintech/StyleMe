@@ -4,18 +4,31 @@ import type {
   AssetRepository,
   BackgroundService,
   CreditLedgerRepository,
+  GarmentRepository,
   ImageEditor,
   ImageEnhancer,
   JobRepository,
   ModerationService,
   ObjectEraser,
   UnitOfWork,
+  VirtualTryOn,
 } from "../../../domain/ports";
 import type { ImageRef } from "../../../domain/value-objects/image-ref";
 
 export interface RunOptions {
   /** Faux = échec provider non définitif (le worker rejouera) : le job reste PROCESSING. */
   isLastAttempt?: boolean;
+}
+
+export interface RunJobConfig {
+  /** Agrandit/affine le résultat des jobs génératifs (occasions, retouche). Désactivé par défaut. */
+  upscaleResults?: boolean;
+}
+
+/** Ce qu'il faut pour les jobs TRYON. Absent = les essayages échouent proprement (0 crédit). */
+export interface TryOnDeps {
+  garments: GarmentRepository;
+  engine: VirtualTryOn;
 }
 
 export class RunEnhancementJob {
@@ -29,7 +42,26 @@ export class RunEnhancementJob {
     private readonly editor: ImageEditor,
     private readonly eraser: ObjectEraser,
     private readonly unitOfWork: UnitOfWork,
+    private readonly config: RunJobConfig = {},
+    private readonly tryOn?: TryOnDeps,
   ) {}
+
+  /** Netteté supplémentaire, au mieux : si l'agrandissement échoue, on livre le résultat non agrandi (jamais d'échec ni de rejeu pour ça). */
+  private async tryUpscale(out: ImageRef): Promise<ImageRef> {
+    try {
+      return await this.enhancer.upscale(out);
+    } catch {
+      return out;
+    }
+  }
+
+  /** Essayage virtuel : habille la personne de la tenue du catalogue (visage, pose et décor conservés). */
+  private async runTryOn(garmentId: string | undefined, person: ImageRef): Promise<ImageRef> {
+    if (!this.tryOn) throw new Error("Essayage non configuré : définir REPLICATE_TOKEN sur l'API");
+    const garment = garmentId ? await this.tryOn.garments.findActiveById(garmentId) : null;
+    if (!garment) throw new Error("garment_missing");
+    return this.tryOn.engine.tryOn(person, { bucket: garment.bucket, key: garment.key }, { category: garment.category, description: garment.description });
+  }
 
   async execute(jobId: string, opts: RunOptions = {}): Promise<Result<void, DomainError>> {
     const isLastAttempt = opts.isLastAttempt ?? true;
@@ -82,11 +114,14 @@ export class RunEnhancementJob {
       if (job.type === "ERASE" && maskAsset) {
         // Gomme : l objet sélectionné est effacé, le reste de la photo reste inchangé.
         out = await this.eraser.erase(input, { bucket: maskAsset.bucket, key: maskAsset.key });
+      } else if (job.type === "TRYON") {
+        out = await this.runTryOn(job.garmentId, input);
       } else {
       // Génératif (retouche libre, ou occasion avec une consigne dédiée) : seul le fond/la demande change, le sujet est conservé.
       const instruction = job.type === "EDIT" ? job.prompt : job.styleId ? OCCASION_PROMPTS[job.styleId] : undefined;
       if (instruction !== undefined) {
         out = await this.editor.edit(input, instruction);
+        if (this.config.upscaleResults) out = await this.tryUpscale(out);
       } else {
         // Pas de consigne pour ce style : pipeline local (agrandissement, détourage, fond en dégradé).
         out = await this.enhancer.upscale(input);

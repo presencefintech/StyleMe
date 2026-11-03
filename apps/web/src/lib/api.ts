@@ -1,4 +1,4 @@
-import type { AssetKind, JobStatus, JobType, Operator, PaymentStatus } from "@styleme/shared";
+import type { AssetKind, GarmentCategory, JobStatus, JobType, Operator, PaymentStatus } from "@styleme/shared";
 
 export class ApiError extends Error {
   constructor(
@@ -12,6 +12,8 @@ export class ApiError extends Error {
 }
 
 export interface UserView { id: string; email: string; ageConfirmed: boolean }
+/** Tenue du catalogue (essayage virtuel). previewUrl est signée et expire. */
+export interface GarmentView { id: string; name: string; category: GarmentCategory; description?: string; previewUrl: string }
 export interface StyleView { id: string; name: string; kind: string; creditCost: number; previewUrl?: string }
 export interface JobView {
   id: string;
@@ -19,6 +21,8 @@ export interface JobView {
   status: JobStatus;
   createdAt: string | null;
   outputs?: { url: string }[];
+  /** Photo d'origine (comparaison avant/après) ; absente si purgée. */
+  sourceUrl?: string;
   errorReason?: string;
 }
 export interface JobPage { items: JobView[]; nextCursor: string | null }
@@ -29,6 +33,7 @@ export type SegmentTarget = { x: number; y: number } | { box: { x0: number; y0: 
 export interface SegmentResult { selectionId: string; overlayUrl: string }
 /** Sélection confirmée : la photo normalisée et le masque, entrées du job ERASE. */
 export interface CommittedSelection { imageAssetId: string; maskAssetId: string }
+export interface ReferralView { code: string; referrals: number; signupBonus: number; referrerBonus: number; maxRewardedReferrals: number }
 export interface PackView { id: string; credits: number; price: number; currency: string }
 
 export type Fetcher = typeof fetch;
@@ -59,9 +64,12 @@ export function createApi(opts: { baseUrl: string; getToken: () => string | null
   const idem = () => ({ "idempotency-key": crypto.randomUUID() });
 
   return {
-    register: (email: string, password: string) => call<{ accessToken: string; user: UserView }>("POST", "/auth/register", { email, password }),
+    register: (email: string, password: string, referralCode?: string) =>
+      call<{ accessToken: string; user: UserView }>("POST", "/auth/register", { email, password, ...(referralCode ? { referralCode } : {}) }),
     login: (email: string, password: string) => call<{ accessToken: string; user: UserView }>("POST", "/auth/login", { email, password }),
     confirmAge: () => call<void>("POST", "/auth/confirm-age", { confirmed: true }),
+    /** Efface les photos et anonymise le compte (le mot de passe est redemandé). */
+    deleteAccount: (password: string) => call<void>("POST", "/auth/delete-account", { password }),
 
     presign: (kind: AssetKind) => call<{ assetId: string; uploadUrl: string; expiresAt: string }>("POST", "/assets/presign", { kind }),
     /** Upload direct vers Supabase Storage via l'URL signée (format de l'API signed-upload : PUT multipart). */
@@ -84,7 +92,8 @@ export function createApi(opts: { baseUrl: string; getToken: () => string | null
     jobAsAsset: (jobId: string) => call<{ assetId: string; url: string }>("POST", `/jobs/${encodeURIComponent(jobId)}/asset`),
 
     styles: () => call<StyleView[]>("GET", "/styles"),
-    createJob: (input: { type: JobType; styleId?: string; prompt?: string; inputAssetIds?: string[]; fromJobId?: string }) =>
+    garments: () => call<GarmentView[]>("GET", "/garments"),
+    createJob: (input: { type: JobType; styleId?: string; garmentId?: string; prompt?: string; inputAssetIds?: string[]; fromJobId?: string }) =>
       call<{ jobId: string; status: JobStatus }>("POST", "/jobs", { inputAssetIds: [], ...input }, idem()),
     getJob: (id: string) => call<JobView>("GET", `/jobs/${encodeURIComponent(id)}`),
     listJobs: (cursor?: string, limit = 20) =>
@@ -92,6 +101,7 @@ export function createApi(opts: { baseUrl: string; getToken: () => string | null
 
     balance: () => call<{ balance: number }>("GET", "/credits/balance"),
     packs: () => call<PackView[]>("GET", "/credits/packs"),
+    referral: () => call<ReferralView>("GET", "/credits/referral"),
     initiatePayment: (input: { packId: string; phone: string; operator: Operator }) =>
       call<{ paymentId: string; status: PaymentStatus }>("POST", "/payments/initiate", input, idem()),
     getPayment: (id: string) => call<{ id: string; status: PaymentStatus }>("GET", `/payments/${encodeURIComponent(id)}`),
@@ -107,6 +117,7 @@ export function errorMessage(e: unknown): string {
       case "NoObjectFound": return "Aucun objet détecté ici. Visez le centre de l'objet à enlever, pas le fond.";
       case "InvalidImage": return "Cette photo ne peut pas être analysée (format ou taille non supportés). Essayez un JPEG ou un PNG plus léger.";
       case "SelectionExpired": return "La sélection a expiré. Touchez à nouveau l'objet.";
+      case "PasswordMismatch": return "Mot de passe incorrect.";
     }
     switch (e.status) {
       case 402: return "Crédits insuffisants.";

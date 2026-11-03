@@ -1,20 +1,23 @@
-import { Global, Inject, Injectable, Logger, Module, OnApplicationShutdown, type DynamicModule, type Provider } from "@nestjs/common";
+import { Global, Inject, Injectable, Logger, Module, OnApplicationShutdown, OnModuleInit, type DynamicModule, type Provider } from "@nestjs/common";
 import { JwtModule, JwtService } from "@nestjs/jwt";
 import { createClient } from "@supabase/supabase-js";
 import { Redis } from "ioredis";
 import type { Worker } from "bullmq";
-import { RunEnhancementJob } from "../application";
-import type { BackgroundService, ImageEditor, ImageEnhancer, ModerationService, ObjectEraser, ObjectSelector, PushService } from "../domain/ports";
+import { PurgeExpiredData, RunEnhancementJob } from "../application";
+import type { BackgroundService, GarmentRepository, ImageEditor, ImageEnhancer, ModerationService, ObjectEraser, ObjectSelector, PushService, UnitOfWork, VirtualTryOn } from "../domain/ports";
 import { T, type IdempotencyStore, type TokenVerifier } from "../presentation/http/common";
-import { RemoveBgBackground, ReplicateEditor, ReplicateEnhancer, ReplicateEraser, SightengineModeration, UnconfiguredEditor, UnconfiguredEraser } from "./ai/api-ai";
+import { RemoveBgBackground, ReplicateEditor, ReplicateEnhancer, ReplicateEraser, ReplicateTryOn, SightengineModeration, UnconfiguredEditor, UnconfiguredEraser, UnconfiguredTryOn } from "./ai/api-ai";
 import { LocalBackground, LocalEnhancer, LocalModeration, LocalObjectSelector } from "./ai/local-ai";
 import { JwtTokenService, ScryptPasswordHasher } from "./auth/auth-adapters";
 import { LogPushService, SystemClock, UuidGenerator } from "./common/common";
 import type { Env } from "./config/env";
 import { FlexpayGateway } from "./payment/flexpay-gateway";
+import { reportError } from "./observability/sentry";
 import {
+  PrismaAccountDataRepository,
   PrismaAssetRepository,
   PrismaCreditLedgerRepository,
+  PrismaGarmentRepository,
   PrismaJobRepository,
   PrismaPaymentRepository,
   PrismaStyleRepository,
@@ -53,12 +56,52 @@ class QueueRuntime implements OnApplicationShutdown {
   ) {
     // BullMQ exige maxRetriesPerRequest=null pour les Workers : connexion dédiée.
     this.worker = createEnhancementWorker(redis.duplicate({ maxRetriesPerRequest: null }), runJob, push, (m) => this.log.warn(m));
-    this.worker.on("failed", (job, e) => this.log.error(`job ${job?.id} failed: ${e.message}`));
+    this.worker.on("failed", (job, e) => {
+      this.log.error(`job ${job?.id} failed: ${e.message}`);
+      // Un échec provider qui sera retenté n'est pas encore une alerte : on signale seulement le dernier essai.
+      if (job && job.attemptsMade >= (job.opts.attempts ?? 1)) reportError(e, { jobId: String(job.id), attempts: String(job.attemptsMade) });
+    });
   }
   async onApplicationShutdown() {
     await this.worker?.close();
     await this.queue.close();
     this.redis.disconnect();
+  }
+}
+
+const RETENTION_FIRST_RUN_MS = 60_000;
+const RETENTION_INTERVAL_MS = 60 * 60 * 1000;
+
+/** Purge de rétention : une minute après le démarrage, puis toutes les heures. Idempotent, un seul réplica suffit. */
+@Injectable()
+class RetentionRuntime implements OnModuleInit, OnApplicationShutdown {
+  private readonly log = new Logger("Retention");
+  private first?: NodeJS.Timeout;
+  private every?: NodeJS.Timeout;
+  private running = false;
+  constructor(@Inject("PURGE") private readonly purge: PurgeExpiredData) {}
+
+  onModuleInit() {
+    this.first = setTimeout(() => void this.run(), RETENTION_FIRST_RUN_MS);
+    this.every = setInterval(() => void this.run(), RETENTION_INTERVAL_MS);
+    this.first.unref();
+    this.every.unref();
+  }
+  private async run() {
+    if (this.running) return;
+    this.running = true;
+    try {
+      await this.purge.execute();
+    } catch (e) {
+      this.log.error(`purge échouée : ${e instanceof Error ? e.message : String(e)}`);
+      reportError(e, { phase: "retention" });
+    } finally {
+      this.running = false;
+    }
+  }
+  onApplicationShutdown() {
+    clearTimeout(this.first);
+    clearInterval(this.every);
   }
 }
 
@@ -77,7 +120,17 @@ export class InfrastructureModule {
       { provide: T.PAYMENTS, useFactory: (p: PrismaService) => new PrismaPaymentRepository(p), inject: [PrismaService] },
       { provide: T.USERS, useFactory: (p: PrismaService) => new PrismaUserRepository(p), inject: [PrismaService] },
       { provide: T.ASSETS, useFactory: (p: PrismaService) => new PrismaAssetRepository(p), inject: [PrismaService] },
+      { provide: T.ACCOUNT_DATA, useFactory: (p: PrismaService) => new PrismaAccountDataRepository(p), inject: [PrismaService] },
+      { provide: T.GARMENTS, useFactory: (p: PrismaService) => new PrismaGarmentRepository(p), inject: [PrismaService] },
       { provide: T.STYLES, useFactory: (p: PrismaService) => new PrismaStyleRepository(p), inject: [PrismaService] },
+      {
+        provide: "PURGE",
+        useFactory: (assets: PrismaAssetRepository, jobs: PrismaJobRepository, storage: SupabaseStorageService) => {
+          const log = new Logger("Retention");
+          return new PurgeExpiredData(assets, jobs, storage, new SystemClock(), (m) => log.log(m));
+        },
+        inject: [T.ASSETS, T.JOBS, T.STORAGE],
+      },
       { provide: T.IDEMPOTENCY, useFactory: (p: PrismaService) => new PrismaIdempotencyStore(p), inject: [PrismaService] },
       { provide: T.IDS, useValue: new UuidGenerator() },
       { provide: T.CLOCK, useValue: new SystemClock() },
@@ -109,6 +162,12 @@ export class InfrastructureModule {
         provide: T.EDITOR,
         useFactory: (storage: SupabaseStorageService): ImageEditor =>
           env.REPLICATE_TOKEN ? new ReplicateEditor(env.REPLICATE_TOKEN, env.REPLICATE_EDIT_MODEL, storage) : new UnconfiguredEditor(),
+        inject: [T.STORAGE],
+      },
+      {
+        provide: T.TRYON,
+        useFactory: (storage: SupabaseStorageService): VirtualTryOn =>
+          env.REPLICATE_TOKEN ? new ReplicateTryOn(env.REPLICATE_TOKEN, env.REPLICATE_TRYON_VERSION, storage) : new UnconfiguredTryOn(),
         inject: [T.STORAGE],
       },
       {
@@ -150,20 +209,41 @@ export class InfrastructureModule {
       { provide: T.TOKEN_ISSUER, useFactory: (jwt: JwtService) => new JwtTokenService(jwt), inject: [JwtService] },
       {
         provide: T.TOKEN_VERIFIER,
-        useFactory: (jwt: JwtService): TokenVerifier => ({
-          verify: async (token) => ({ userId: (await jwt.verifyAsync<{ sub: string }>(token)).sub }),
-        }),
-        inject: [JwtService],
+        // Un jeton reste valide 30 jours : on vérifie aussi que le compte n'a pas été supprimé (résultat gardé 30 s).
+        useFactory: (jwt: JwtService, p: PrismaService): TokenVerifier => {
+          const activeUntil = new Map<string, number>();
+          return {
+            verify: async (token) => {
+              const userId = (await jwt.verifyAsync<{ sub: string }>(token)).sub;
+              if ((activeUntil.get(userId) ?? 0) > Date.now()) return { userId };
+              const user = await p.root.user.findFirst({ where: { id: userId, deletedAt: null }, select: { id: true } });
+              if (!user) throw new Error("account deleted or unknown");
+              if (activeUntil.size > 5000) activeUntil.clear();
+              activeUntil.set(userId, Date.now() + 30_000);
+              return { userId };
+            },
+          };
+        },
+        inject: [JwtService, PrismaService],
       },
       {
         provide: "RUN_JOB",
-        useFactory: (...a: ConstructorParameters<typeof RunEnhancementJob>) => new RunEnhancementJob(...a),
-        inject: [T.JOBS, T.LEDGER, T.ASSETS, T.MODERATION, T.ENHANCER, T.BACKGROUND, T.EDITOR, T.ERASER, T.UOW],
+        useFactory: (
+          jobs: PrismaJobRepository,
+          ledger: PrismaCreditLedgerRepository,
+          assets: PrismaAssetRepository,
+          ...rest: [ModerationService, ImageEnhancer, BackgroundService, ImageEditor, ObjectEraser, UnitOfWork, VirtualTryOn, GarmentRepository]
+        ) => {
+          const [moderation, enhancer, background, editor, eraser, uow, engine, garments] = rest;
+          return new RunEnhancementJob(jobs, ledger, assets, moderation, enhancer, background, editor, eraser, uow, { upscaleResults: env.UPSCALE_RESULTS === "true" }, { garments, engine });
+        },
+        inject: [T.JOBS, T.LEDGER, T.ASSETS, T.MODERATION, T.ENHANCER, T.BACKGROUND, T.EDITOR, T.ERASER, T.UOW, T.TRYON, T.GARMENTS],
       },
       ...(env.REDIS_URL ? [QueueRuntime] : []),
+      ...(env.RETENTION_ENABLED === "true" ? [RetentionRuntime] : []),
     ];
     const exported = [
-      PrismaService, T.UOW, T.JOBS, T.LEDGER, T.PAYMENTS, T.USERS, T.ASSETS, T.STYLES, T.IDEMPOTENCY, T.IDS, T.CLOCK, T.PUSH,
+      PrismaService, T.UOW, T.JOBS, T.LEDGER, T.PAYMENTS, T.USERS, T.ASSETS, T.ACCOUNT_DATA, T.GARMENTS, T.STYLES, T.IDEMPOTENCY, T.IDS, T.CLOCK, T.PUSH,
       T.STORAGE, T.QUEUE, T.ENHANCER, T.BACKGROUND, T.EDITOR, T.ERASER, T.SELECTOR, T.MODERATION, T.GATEWAY, T.PASSWORD, T.TOKEN_ISSUER, T.TOKEN_VERIFIER,
     ];
     return {

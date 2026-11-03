@@ -12,6 +12,13 @@ enum JobType {
   PHOTOSHOOT
   EDIT
   ERASE
+  TRYON
+}
+
+enum GarmentCategory {
+  UPPER_BODY
+  LOWER_BODY
+  DRESSES
 }
 
 enum JobStatus {
@@ -45,6 +52,13 @@ model User {
   email          String              @unique
   passwordHash   String
   ageConfirmedAt DateTime?
+  /// Code de parrainage partagé par l'utilisateur ; `referredById` = parrain éventuel.
+  referralCode   String              @unique
+  referredById   String?
+  referredBy     User?               @relation("Referral", fields: [referredById], references: [id])
+  referrals      User[]              @relation("Referral")
+  /// Compte supprimé (anonymisé) : l'email et le mot de passe ont été remplacés, les photos effacées.
+  deletedAt      DateTime?
   createdAt      DateTime            @default(now())
   assets         Asset[]
   jobs           Job[]
@@ -66,6 +80,24 @@ model Asset {
   @@index([userId])
 }
 
+/// Tenue du catalogue (essayage virtuel). L'image est dans le bucket privé "garments".
+/// license + author : on ne publie que des visuels dont on a le droit (couturier partenaire, généré par IA, banque sous licence).
+model Garment {
+  id          String          @id
+  name        String
+  category    GarmentCategory
+  description String?
+  bucket      String          @default("garments")
+  key         String
+  author      String?
+  license     String
+  active      Boolean         @default(true)
+  createdAt   DateTime        @default(now())
+  jobs        Job[]
+
+  @@unique([bucket, key])
+}
+
 model StyleTemplate {
   id         String    @id
   name       String
@@ -84,6 +116,8 @@ model Job {
   prompt         String?
   styleId        String?
   style          StyleTemplate? @relation(fields: [styleId], references: [id])
+  garmentId      String?
+  garment        Garment?       @relation(fields: [garmentId], references: [id])
   creditCost     Int
   status         JobStatus
   inputAssetIds  String[]

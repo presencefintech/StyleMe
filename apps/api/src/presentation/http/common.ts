@@ -27,6 +27,9 @@ export const T = {
   PAYMENTS: "PaymentRepository",
   USERS: "UserRepository",
   ASSETS: "AssetRepository",
+  GARMENTS: "GarmentRepository",
+  TRYON: "VirtualTryOn",
+  ACCOUNT_DATA: "AccountDataRepository",
   STYLES: "StyleRepository",
   MODERATION: "ModerationService",
   ENHANCER: "ImageEnhancer",
@@ -94,12 +97,13 @@ export function unwrap<T>(r: Result<T, E.DomainError>): T {
   return r.value;
 }
 
-export const jobView = (job: Job, outputUrls?: string[]) => ({
+export const jobView = (job: Job, outputUrls?: string[], sourceUrl?: string) => ({
   id: job.id,
   type: job.type,
   status: job.status,
   createdAt: job.createdAt ?? null,
   ...(outputUrls ? { outputs: outputUrls.map((url) => ({ url })) } : {}),
+  ...(sourceUrl ? { sourceUrl } : {}),
   ...(job.errorReason ? { errorReason: job.errorReason } : {}),
 });
 
@@ -112,6 +116,7 @@ const HTTP_BY_ERROR: [new (...a: never[]) => E.DomainError, number][] = [
   [E.PaymentNotFound, 404],
   [E.PackNotFound, 404],
   [E.AssetNotFound, 404],
+  [E.GarmentNotFound, 404],
   [E.UserNotFound, 404],
   [E.InvalidJobTransition, 409],
   [E.InvalidPaymentTransition, 409],
@@ -120,6 +125,7 @@ const HTTP_BY_ERROR: [new (...a: never[]) => E.DomainError, number][] = [
   [E.SelectionExpired, 410],
   [E.AgeNotConfirmed, 403],
   [E.InvalidCredentials, 401],
+  [E.PasswordMismatch, 403], // pas 401 : le front déconnecterait l'utilisateur au lieu de lui laisser corriger
   [E.EmailAlreadyUsed, 409],
   [E.InvalidEmail, 400],
   [E.WeakPassword, 400],
@@ -129,6 +135,12 @@ const HTTP_BY_ERROR: [new (...a: never[]) => E.DomainError, number][] = [
 
 export function statusOf(error: E.DomainError): number {
   return HTTP_BY_ERROR.find(([cls]) => error instanceof cls)?.[1] ?? 400;
+}
+
+/** Branché au démarrage (Sentry). Par défaut : rien. Ne reçoit que les erreurs inattendues (500), jamais les erreurs métier. */
+let unexpectedErrorReporter: (error: unknown) => void = () => {};
+export function setUnexpectedErrorReporter(fn: (error: unknown) => void) {
+  unexpectedErrorReporter = fn;
 }
 
 @Catch()
@@ -144,6 +156,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
       return res.status(exception.getStatus()).json(typeof body === "string" ? { message: body } : body);
     }
     this.log.error(exception instanceof Error ? exception.stack : String(exception));
+    unexpectedErrorReporter(exception);
     return res.status(500).json({ error: "InternalServerError" });
   }
 }

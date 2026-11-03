@@ -1,8 +1,10 @@
 import logging
+import os
 import threading
 import time
 import uuid
 from collections import OrderedDict
+from contextlib import asynccontextmanager
 from functools import lru_cache
 from io import BytesIO
 from typing import Annotated, Callable
@@ -22,7 +24,56 @@ log = logging.getLogger("styleme.ai")
 READABLE_BUCKETS = {"sources", "results"}
 RESULTS_BUCKET = "results"
 
-app = FastAPI(title="StyleMe AI service", docs_url=None, redoc_url=None)
+def _init_sentry() -> None:
+    """Suivi des erreurs, actif seulement si SENTRY_DSN est défini. Aucune donnée personnelle n'est envoyée."""
+    dsn = os.environ.get("SENTRY_DSN")
+    if not dsn:
+        return
+    import sentry_sdk
+
+    def scrub(event, _hint):
+        event.pop("request", None)  # les corps de requête contiennent des clés "<userId>/..."
+        event.pop("user", None)
+        return event
+
+    sentry_sdk.init(
+        dsn=dsn,
+        environment=os.environ.get("RAILWAY_ENVIRONMENT_NAME", "development"),
+        send_default_pii=False,
+        include_local_variables=False,
+        traces_sample_rate=0,
+        before_send=scrub,
+    )
+    log.info("Sentry activé")
+
+
+_init_sentry()
+
+
+def _warm_models() -> None:
+    """Charge les modèles en tâche de fond au démarrage : le service répond tout de suite à /health,
+    et la première vraie photo n'attend plus le chargement des modèles."""
+    try:
+        # Utile pour régler les threads ONNX (OMP_NUM_THREADS) : un conteneur voit souvent tous les cœurs de l'hôte.
+        usable = len(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else None
+        log.info("CPU : os.cpu_count=%s, utilisables=%s, OMP_NUM_THREADS=%s", os.cpu_count(), usable, os.environ.get("OMP_NUM_THREADS"))
+        with _sam_lock:
+            log.info("préchauffage SAM : %.1fs", segment.warmup())
+            log.info("préchauffage détourage : %.1fs", ops.warmup_cutout())
+    except Exception:  # noqa: BLE001 - un échec de préchauffage ne doit jamais empêcher le service de tourner
+        log.exception("préchauffage échoué (les modèles se chargeront à la première requête)")
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    # Désactivé par défaut : sur Railway, charger SAM + u2net dès le démarrage dépasse la mémoire du conteneur (le processus
+    # est tué en boucle et l'API perd la modération). À activer (AI_WARMUP=1) seulement si le service a assez de RAM.
+    if os.environ.get("AI_WARMUP", "0") == "1":
+        threading.Thread(target=_warm_models, name="warmup", daemon=True).start()
+    yield
+
+
+app = FastAPI(title="StyleMe AI service", docs_url=None, redoc_url=None, lifespan=lifespan)
 
 
 # --- Dépendances (surchargées dans les tests) ---------------------------------------------------

@@ -1,5 +1,9 @@
-export const JOB_TYPES = ["ENHANCE", "PHOTOSHOOT", "EDIT", "ERASE"] as const;
+export const JOB_TYPES = ["ENHANCE", "PHOTOSHOOT", "EDIT", "ERASE", "TRYON"] as const;
 export type JobType = (typeof JOB_TYPES)[number];
+
+/** Catégorie d'une tenue : le modèle d'essayage doit savoir quelle partie du corps habiller. */
+export const GARMENT_CATEGORIES = ["UPPER_BODY", "LOWER_BODY", "DRESSES"] as const;
+export type GarmentCategory = (typeof GARMENT_CATEGORIES)[number];
 
 export const JOB_STATUSES = ["PENDING", "PROCESSING", "DONE", "REJECTED", "FAILED"] as const;
 export type JobStatus = (typeof JOB_STATUSES)[number];

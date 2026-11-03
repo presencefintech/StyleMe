@@ -56,6 +56,18 @@ def _sam():
     return _session
 
 
+def warmup() -> float:
+    """Charge le modèle SAM et fait passer une image factice dans l'encodeur ET le décodeur.
+
+    Sans cela, la première vraie photo paie le chargement des modèles (plusieurs dizaines de secondes sur un petit CPU).
+    Renvoie la durée en secondes.
+    """
+    started = time.perf_counter()
+    dummy = Image.new("RGB", (256, 256), (128, 128, 128))
+    decode(encode(dummy), 128, 128)
+    return time.perf_counter() - started
+
+
 def fit_max_side(img: Image.Image, max_side: int = MAX_SIDE) -> Image.Image:
     if max(img.size) <= max_side:
         return img

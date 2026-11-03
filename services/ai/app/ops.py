@@ -6,6 +6,7 @@ Pour la qualité de production, remplacer le corps de chaque fonction (la signat
   - remove_bg     -> rembg (utilisé automatiquement s'il est installé : `pip install rembg`)
 """
 import logging
+import time
 from io import BytesIO
 
 from PIL import Image, ImageColor, ImageFilter, ImageOps, UnidentifiedImageError
@@ -54,6 +55,13 @@ def restore_face(img: Image.Image) -> Image.Image:
 
 _warned_no_rembg = False
 _rembg_session = None
+
+
+def warmup_cutout() -> float:
+    """Charge le modèle de détourage (u2net) et le fait tourner une fois sur une image factice. Durée en secondes."""
+    started = time.perf_counter()
+    remove_background(Image.new("RGB", (128, 128), (128, 128, 128)))
+    return time.perf_counter() - started
 
 
 def remove_background(img: Image.Image) -> Image.Image:

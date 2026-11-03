@@ -1,4 +1,8 @@
 import type {
+  GarmentRecord,
+  GarmentRepository,
+  VirtualTryOn,
+  AccountDataRepository,
   AssetRecord,
   AssetRepository,
   Page,
@@ -47,15 +51,28 @@ export class InMemoryJobRepository implements JobRepository {
     const hasMore = start + page.limit < all.length;
     return { items, nextCursor: hasMore ? (items[items.length - 1]?.id ?? null) : null };
   }
+  async listFinishedBefore(before: Date, limit: number) {
+    return [...this.items.values()]
+      .filter((j) => ["DONE", "FAILED", "REJECTED"].includes(j.status) && j.createdAt !== undefined && j.createdAt < before)
+      .slice(0, limit);
+  }
+  async deleteMany(ids: string[]) { for (const id of ids) this.items.delete(id); }
 }
 
 export class InMemoryAssetRepository implements AssetRepository {
   readonly items = new Map<string, AssetRecord>();
   async save(a: AssetRecord) { this.items.set(a.id, a); }
-  async findByIds(ids: string[]) { return ids.flatMap((id) => this.items.get(id) ?? []); }
+  readonly deleted = new Set<string>();
+  async findByIds(ids: string[]) { return ids.flatMap((id) => (this.deleted.has(id) ? [] : (this.items.get(id) ?? []))); }
   async findByRef(bucket: string, key: string) {
-    return [...this.items.values()].find((a) => a.bucket === bucket && a.key === key) ?? null;
+    return [...this.items.values()].find((a) => a.bucket === bucket && a.key === key && !this.deleted.has(a.id)) ?? null;
   }
+  async listExpired(kind: AssetRecord["kind"], before: Date, limit: number) {
+    return [...this.items.values()]
+      .filter((a) => a.kind === kind && !this.deleted.has(a.id) && a.createdAt !== undefined && a.createdAt < before)
+      .slice(0, limit);
+  }
+  async markDeleted(ids: string[]) { for (const id of ids) this.deleted.add(id); }
 }
 
 export class InMemoryStyleRepository implements StyleRepository {
@@ -65,10 +82,23 @@ export class InMemoryStyleRepository implements StyleRepository {
 
 export class FakeStorage implements StorageService {
   readonly puts: ImageRef[] = [];
+  readonly deletes: ImageRef[] = [];
+  readonly deletedPrefixes: { bucket: string; prefix: string }[] = [];
+  /** Clés dont la suppression échoue (simule une panne du stockage). */
+  readonly failDeleteFor = new Set<string>();
   async presignUpload(ref: ImageRef) { return { url: `https://storage.test/upload/${ref.bucket}/${ref.key}` }; }
   async presignDownload(ref: ImageRef) { return { url: `https://storage.test/dl/${ref.bucket}/${ref.key}` }; }
   async put(ref: ImageRef) { this.puts.push(ref); }
-  async delete() {}
+  async delete(ref: ImageRef) {
+    if (this.failDeleteFor.has(ref.key)) throw new Error("storage down");
+    this.deletes.push(ref);
+  }
+  async deletePrefix(bucket: string, prefix: string) { this.deletedPrefixes.push({ bucket, prefix }); }
+}
+
+export class InMemoryAccountData implements AccountDataRepository {
+  readonly erased: string[] = [];
+  async erase(userId: string) { this.erased.push(userId); }
 }
 
 export class FakePush implements PushService {
@@ -101,6 +131,12 @@ export class InMemoryUserRepository implements UserRepository {
   async findById(id: string) { return this.items.get(id) ?? null; }
   async findByEmail(email: string) {
     return [...this.items.values()].find((u) => u.email.value === email) ?? null;
+  }
+  async findByReferralCode(code: string) {
+    return [...this.items.values()].find((u) => u.referralCode === code) ?? null;
+  }
+  async countReferrals(userId: string) {
+    return [...this.items.values()].filter((u) => u.referredById === userId).length;
   }
 }
 
@@ -224,4 +260,20 @@ export class FixedClock implements Clock {
 export class SequentialIdGenerator implements IdGenerator {
   private n = 0;
   next() { return `id_${++this.n}`; }
+}
+
+export class InMemoryGarmentRepository implements GarmentRepository {
+  constructor(readonly items: (GarmentRecord & { active?: boolean })[] = []) {}
+  async listActive() { return this.items.filter((g) => g.active !== false); }
+  async findActiveById(id: string) { return this.items.find((g) => g.id === id && g.active !== false) ?? null; }
+}
+
+export class FakeTryOn implements VirtualTryOn {
+  readonly calls: { person: ImageRef; garment: ImageRef; category: string; description?: string }[] = [];
+  constructor(private failWith?: Error) {}
+  async tryOn(person: ImageRef, garment: ImageRef, opts: { category: string; description?: string }): Promise<ImageRef> {
+    this.calls.push({ person, garment, category: opts.category, description: opts.description });
+    if (this.failWith) throw this.failWith;
+    return { bucket: "results", key: `${person.key}.tryon` };
+  }
 }

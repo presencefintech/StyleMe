@@ -8,6 +8,12 @@ const schema = z
     SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
     /** Optionnel : absent = file en mémoire (DEV uniquement). Obligatoire en production. */
     REDIS_URL: z.string().min(1).optional(),
+    /** Optionnel : suivi des erreurs (Sentry). Absent = désactivé. */
+    SENTRY_DSN: z.string().url().optional(),
+    /** Purge automatique des photos (rétention). Mettre "false" pour la couper, par exemple sur un poste de dev branché sur la base de prod. */
+    RETENTION_ENABLED: z.enum(["true", "false"]).default("true"),
+    /** Agrandit/affine les résultats génératifs avec l'upscaler (Real-ESRGAN local ou REPLICATE_UPSCALE_MODEL). Plus lent. */
+    UPSCALE_RESULTS: z.enum(["true", "false"]).default("false"),
     JWT_SECRET: z.string().min(16),
     CORS_ORIGIN: z.string().min(1),
     AI_MODE: z.enum(["local", "api"]),
@@ -16,6 +22,8 @@ const schema = z
     REPLICATE_FACE_MODEL: z.string().optional(),
     /** Modèle d'édition par instruction (jobs EDIT). Nécessite REPLICATE_TOKEN. */
     REPLICATE_EDIT_MODEL: z.string().default("black-forest-labs/flux-kontext-pro"),
+    /** Modèle d'essayage virtuel (jobs TRYON), version épinglée : IDM-VTON sur Replicate. Nécessite REPLICATE_TOKEN. */
+    REPLICATE_TRYON_VERSION: z.string().default("0513734a452173b8173e907e3a59d19a36266e55b48528559432bd21c7d7e985"),
     /** Modèle de gomme (jobs ERASE). Nécessite REPLICATE_TOKEN. */
     REPLICATE_ERASE_MODEL: z.string().default("bria/eraser"),
     REMOVEBG_KEY: z.string().optional(),

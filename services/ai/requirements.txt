@@ -6,5 +6,7 @@ python-dotenv>=1.0,<2
 # Détourage (u2net) et sélection d'objets (SAM) : ONNX sur CPU
 rembg>=2.0.86
 onnxruntime>=1.18
+# Suivi des erreurs (optionnel : actif seulement si SENTRY_DSN est défini)
+sentry-sdk>=2.0,<3
 # Tests
 pytest>=8,<9

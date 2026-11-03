@@ -7,6 +7,8 @@ export interface JobProps {
   userId: string;
   type: JobType;
   styleId?: string;
+  /** Tenue essayée (jobs TRYON). */
+  garmentId?: string;
   /** Instruction libre (jobs EDIT). */
   prompt?: string;
   creditCost: CreditAmount;
@@ -26,6 +28,7 @@ export class Job {
     userId: string;
     type: JobType;
     styleId?: string;
+    garmentId?: string;
     prompt?: string;
     creditCost: CreditAmount;
     inputAssetIds: string[];
@@ -40,6 +43,7 @@ export class Job {
   get userId() { return this.props.userId; }
   get type() { return this.props.type; }
   get styleId() { return this.props.styleId; }
+  get garmentId() { return this.props.garmentId; }
   get prompt() { return this.props.prompt; }
   get creditCost() { return this.props.creditCost; }
   get status() { return this.props.status; }

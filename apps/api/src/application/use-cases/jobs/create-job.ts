@@ -1,10 +1,11 @@
 import { err, JOB_BASE_COST, MAX_PROMPT_LENGTH, ok, type JobType, type Result } from "@styleme/shared";
 import { Job } from "../../../domain/entities/job";
-import { AgeNotConfirmed, AssetNotFound, DomainError, InsufficientCredits, InvalidPrompt, JobNotFound, UserNotFound } from "../../../domain/errors";
+import { AgeNotConfirmed, AssetNotFound, DomainError, GarmentNotFound, InsufficientCredits, InvalidPrompt, JobNotFound, UserNotFound } from "../../../domain/errors";
 import type {
   AssetRecord,
   AssetRepository,
   CreditLedgerRepository,
+  GarmentRepository,
   IdGenerator,
   JobQueue,
   JobRepository,
@@ -22,6 +23,8 @@ export interface CreateJobInput {
   inputAssetIds: string[];
   /** Retouche enchaînée : part du RÉSULTAT d'un job précédent (EDIT uniquement). */
   fromJobId?: string;
+  /** Essayage virtuel : tenue du catalogue (TRYON uniquement). */
+  garmentId?: string;
 }
 
 export class CreateJob {
@@ -32,6 +35,7 @@ export class CreateJob {
     private readonly assets: AssetRepository,
     private readonly queue: JobQueue,
     private readonly ids: IdGenerator,
+    private readonly garments?: GarmentRepository,
   ) {}
 
   async execute(input: CreateJobInput): Promise<Result<Job, DomainError>> {
@@ -45,6 +49,12 @@ export class CreateJob {
     // Source de l'image : upload de l'utilisateur, ou résultat d'un de ses jobs précédents.
     // Gomme : exactement [photo normalisée, masque] issus de la sélection.
     if (input.type === "ERASE" && (input.inputAssetIds.length !== 2 || input.fromJobId)) return err(new AssetNotFound());
+
+    // Essayage : une tenue ACTIVE du catalogue + exactement une photo de la personne.
+    if (input.type === "TRYON") {
+      if (!input.garmentId || input.inputAssetIds.length !== 1 || input.fromJobId || !this.garments) return err(new GarmentNotFound());
+      if (!(await this.garments.findActiveById(input.garmentId))) return err(new GarmentNotFound());
+    }
 
     let inputAssetIds = input.inputAssetIds;
     let chained: AssetRecord | undefined;
@@ -76,6 +86,7 @@ export class CreateJob {
       userId: input.userId,
       type: input.type,
       styleId: input.styleId,
+      garmentId: input.type === "TRYON" ? input.garmentId : undefined,
       prompt: input.type === "EDIT" ? prompt : undefined,
       creditCost: cost,
       inputAssetIds,

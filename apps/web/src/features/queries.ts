@@ -8,7 +8,9 @@ const TERMINAL = ["DONE", "REJECTED", "FAILED"];
 export const keys = {
   balance: ["balance"] as const,
   styles: ["styles"] as const,
+  garments: ["garments"] as const,
   packs: ["packs"] as const,
+  referral: ["referral"] as const,
   job: (id: string) => ["job", id] as const,
   jobs: ["jobs"] as const,
   payment: (id: string) => ["payment", id] as const,
@@ -21,6 +23,15 @@ export function useBalance() {
 export function useStyles() {
   const api = useApi();
   return useQuery({ queryKey: keys.styles, queryFn: () => api.styles(), staleTime: 5 * 60_000 });
+}
+/** Les miniatures sont signées pour 1 h : on rafraîchit un peu avant. */
+export function useGarments() {
+  const api = useApi();
+  return useQuery({ queryKey: keys.garments, queryFn: () => api.garments(), staleTime: 30 * 60_000 });
+}
+export function useReferral() {
+  const api = useApi();
+  return useQuery({ queryKey: keys.referral, queryFn: () => api.referral() });
 }
 export function usePacks() {
   const api = useApi();

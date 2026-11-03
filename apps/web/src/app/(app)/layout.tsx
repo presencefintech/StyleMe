@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import { Logo } from "@/components/logo";
+import { InstallPrompt } from "@/components/pwa";
 import { Button, Card, CreditBadge, ErrorNote, Screen, cx } from "@/components/ui";
 import { errorMessage } from "@/lib/api";
 import { useBalance } from "@/features/queries";
@@ -11,10 +12,10 @@ import { useApi, useAuth } from "@/lib/providers";
 
 const NAV = [
   { href: "/enhance", label: "Occasions", glyph: "✦" },
+  { href: "/tryon", label: "Habillage", glyph: "♛" },
   { href: "/edit", label: "Retoucher", glyph: "✎" },
   { href: "/erase", label: "Gomme", glyph: "⌫" },
   { href: "/history", label: "Historique", glyph: "◷" },
-  { href: "/credits", label: "Crédits", glyph: "◈" },
 ];
 
 /** Age gate +18 : bloque l'accès tant que l'utilisateur n'a pas confirmé. */
@@ -75,6 +76,7 @@ function Header() {
           </nav>
           <div className="flex items-center gap-sm">
             <Link href="/credits" aria-label="Mes crédits"><CreditBadge value={balance.data?.balance} /></Link>
+            <Link href="/account" aria-current={path.startsWith("/account") ? "page" : undefined} className="rounded-pill px-sm py-xs text-caption font-medium text-ink-muted hover:text-ink">Compte</Link>
             <Button variant="ghost" onClick={signOut} className="min-h-0 px-sm py-xs text-caption">Quitter</Button>
           </div>
         </div>
@@ -113,6 +115,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   return (
     <>
       <Header />
+      <InstallPrompt />
       <main className="pb-24 md:pb-0">{children}</main>
     </>
   );
