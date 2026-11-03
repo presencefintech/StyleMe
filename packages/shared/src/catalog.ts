@@ -218,7 +218,7 @@ export function accessoriesPrompt(list: readonly Accessory[]): string {
   );
 }
 
-/** Une collection : un point de départ qui préremplit le look (l'utilisatrice peut tout modifier ensuite). */
+/** Une collection : un point de départ qui préremplit le look (l'utilisatrice peut tout modifier ensuite). Elles ne prérempliront jamais de maquillage : c'est un choix personnel, facultatif. */
 export interface Collection {
   id: string;
   name: string;
@@ -231,10 +231,10 @@ export interface Collection {
 }
 
 export const COLLECTIONS: readonly Collection[] = [
-  { id: "mariage-traditionnel", name: "Mariage traditionnel", description: "Tresses élaborées, maquillage de mariée, bijoux dorés", styleId: "mariage", hairstyleId: "tresses-elaborees", makeupId: "mariee", accessoryIds: ["collier-or", "pendantes-or"] },
-  { id: "soiree-glamour", name: "Soirée glamour", description: "Lace lisse, maquillage soirée, créoles dorées", styleId: "fetes", hairstyleId: "lace-lisse", makeupId: "soiree", accessoryIds: ["creoles-or", "sac-luxe"] },
-  { id: "bapteme-elegant", name: "Baptême élégant", description: "Bob lisse, maquillage nude, petites touches dorées", styleId: "bapteme", hairstyleId: "bob-lisse", makeupId: "nude", accessoryIds: ["creoles-or"] },
-  { id: "anniversaire-chic", name: "Anniversaire chic", description: "Boucles, maquillage glamour, bracelets dorés", styleId: "anniversaire", hairstyleId: "lace-bouclee", makeupId: "glamour", accessoryIds: ["bracelets-or"] },
+  { id: "mariage-traditionnel", name: "Mariage traditionnel", description: "Tresses élaborées, bijoux dorés", styleId: "mariage", hairstyleId: "tresses-elaborees", accessoryIds: ["collier-or", "pendantes-or"] },
+  { id: "soiree-glamour", name: "Soirée glamour", description: "Lace lisse, créoles dorées, sac de luxe", styleId: "fetes", hairstyleId: "lace-lisse", accessoryIds: ["creoles-or", "sac-luxe"] },
+  { id: "bapteme-elegant", name: "Baptême élégant", description: "Bob lisse, petites touches dorées", styleId: "bapteme", hairstyleId: "bob-lisse", accessoryIds: ["creoles-or"] },
+  { id: "anniversaire-chic", name: "Anniversaire chic", description: "Boucles, bracelets dorés", styleId: "anniversaire", hairstyleId: "lace-bouclee", accessoryIds: ["bracelets-or"] },
 ];
 
 /** Coût (crédits) de chaque étape d'un look composé. */

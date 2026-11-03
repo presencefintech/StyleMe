@@ -91,8 +91,8 @@ function LookPage() {
     setCollectionId(c?.id ?? null);
     setStyleId(c?.styleId ?? null);
     setHairstyleId(c?.hairstyleId ?? null);
-    setMakeupId(c?.makeupId ?? null);
     setAccessoryIds([...(c?.accessoryIds ?? [])]);
+    // Le maquillage n'est jamais prérempli : c'est un choix personnel, facultatif.
   }
 
   function toggleAccessory(id: string) {
@@ -142,7 +142,7 @@ function LookPage() {
       {step === 0 && (
         <div className="space-y-md">
           <h2 className="font-display text-h2 font-semibold">Choisissez une collection</h2>
-          <p className="text-caption text-ink-muted">Une collection préremplit la coiffure, le maquillage, les accessoires et le décor. Vous pouvez tout modifier ensuite.</p>
+          <p className="text-caption text-ink-muted">Une collection préremplit la coiffure, les accessoires et le décor. Vous pouvez tout modifier ensuite.</p>
           <ul className="grid gap-md sm:grid-cols-2">
             {COLLECTIONS.map((c) => (
               <li key={c.id}>
@@ -206,6 +206,7 @@ function LookPage() {
       {step === 3 && (
         <div className="space-y-md">
           <h2 className="font-display text-h2 font-semibold">Maquillage et accessoires</h2>
+          <p className="text-caption text-ink-muted">Tout est facultatif : ne choisissez rien pour passer cette étape.</p>
           <p className="text-caption font-semibold uppercase tracking-widest text-ink-muted">Maquillage</p>
           <ul className="grid grid-cols-2 gap-md sm:grid-cols-4">
             {MAKEUPS.map((m) => (
