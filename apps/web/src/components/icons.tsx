@@ -4,6 +4,9 @@ import type { ReactNode } from "react";
 const PATHS = {
   occasions: (<><rect x="4" y="5" width="16" height="15" rx="2" /><path d="M4 10h16M9 3v4M15 3v4" /></>),
   tryon: (<><path d="M12 8V6.5a2 2 0 1 1 2 2" /><path d="M12 8 3.5 14.5a1 1 0 0 0 .6 1.8h15.8a1 1 0 0 0 .6-1.8L12 8Z" /></>),
+  hair: (<><path d="M6 20c-1-6 0-14 6-14s7 8 6 14" /><path d="M9 12c1.5 1 4.5 1 6 0" /></>),
+  feed: (<><rect x="4" y="4" width="16" height="16" rx="2" /><path d="M4 15l4-4 4 4 3-3 5 5" /><circle cx="9" cy="9" r="1.2" /></>),
+  look: (<><path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8L12 3Z" /><path d="M18 15l.8 2.2L21 18l-2.2.8L18 21l-.8-2.2L15 18l2.2-.8L18 15Z" /></>),
   edit: (<path d="M4 20h4L19 9l-4-4L4 16v4Z" />),
   erase: (<path d="M9 20h10M5.5 15 14 6.5l4.5 4.5-6 6H8.5l-3-2.5Z" />),
   history: (<><circle cx="12" cy="12" r="8" /><path d="M12 7.5V12l3 2" /></>),

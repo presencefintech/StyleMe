@@ -1,6 +1,9 @@
 /* Service worker StyleMe : rend l'app installable et affiche une page de secours hors ligne.
    Volontairement minimal : jamais de cache pour l'API, les photos ou les URLs signées (données privées, durée de vie courte). */
-const VERSION = "styleme-v2";
+const VERSION = "styleme-v3";
+/* En développement (localhost), Next sert les fichiers /_next/static/ sans hash dans le nom : les garder en cache ferait
+   afficher d'anciennes versions de l'app. Le cache d'abord ne vaut que pour la production. */
+const IS_DEV = self.location.hostname === "localhost" || self.location.hostname === "127.0.0.1";
 const OFFLINE_URL = "/offline";
 
 self.addEventListener("install", (event) => {
@@ -29,7 +32,7 @@ self.addEventListener("fetch", (event) => {
   }
 
   // Fichiers versionnés (hash dans le nom) et icônes : cache d'abord.
-  if (url.pathname.startsWith("/_next/static/") || url.pathname.startsWith("/pwa-icon/")) {
+  if (!IS_DEV && (url.pathname.startsWith("/_next/static/") || url.pathname.startsWith("/pwa-icon/"))) {
     event.respondWith(
       caches.match(req).then(
         (hit) =>

@@ -1,4 +1,4 @@
-import type { AssetKind, GarmentCategory, JobStatus, JobType, Operator, PaymentStatus } from "@styleme/shared";
+import type { AssetKind, GarmentCategory, JobStatus, JobType, Operator, PaymentStatus, PostVisibility } from "@styleme/shared";
 
 export class ApiError extends Error {
   constructor(
@@ -35,6 +35,22 @@ export interface SegmentResult { selectionId: string; overlayUrl: string }
 export interface CommittedSelection { imageAssetId: string; maskAssetId: string }
 export interface ReferralView { code: string; referrals: number; signupBonus: number; referrerBonus: number; maxRewardedReferrals: number }
 export interface PackView { id: string; credits: number; price: number; currency: string }
+
+/** Look publié dans le fil. imageUrl est signée et expire. L'auteure n'est jamais nommée. */
+export interface PostView {
+  id: string;
+  imageUrl: string;
+  caption?: string;
+  visibility: PostVisibility;
+  look: { garmentId?: string; hairstyleId?: string; hairstyleName?: string; makeupId?: string; makeupName?: string; accessoryIds: string[]; occasionId?: string };
+  likeCount: number;
+  likedByMe: boolean;
+  mine: boolean;
+  hidden: boolean;
+  createdAt: string;
+}
+export interface PostPage { items: PostView[]; nextCursor: string | null }
+export type ReportReason = "inapproprie" | "usurpation" | "autre";
 
 export type Fetcher = typeof fetch;
 
@@ -93,11 +109,20 @@ export function createApi(opts: { baseUrl: string; getToken: () => string | null
 
     styles: () => call<StyleView[]>("GET", "/styles"),
     garments: () => call<GarmentView[]>("GET", "/garments"),
-    createJob: (input: { type: JobType; styleId?: string; garmentId?: string; prompt?: string; inputAssetIds?: string[]; fromJobId?: string }) =>
+    createJob: (input: { type: JobType; styleId?: string; garmentId?: string; hairstyleId?: string; makeupId?: string; accessoryIds?: string[]; prompt?: string; inputAssetIds?: string[]; fromJobId?: string }) =>
       call<{ jobId: string; status: JobStatus }>("POST", "/jobs", { inputAssetIds: [], ...input }, idem()),
     getJob: (id: string) => call<JobView>("GET", `/jobs/${encodeURIComponent(id)}`),
     listJobs: (cursor?: string, limit = 20) =>
       call<JobPage>("GET", `/jobs?limit=${limit}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`),
+
+    publishPost: (input: { jobId: string; visibility: PostVisibility; caption?: string }) =>
+      call<PostView>("POST", "/posts", { ...input, consent: true }),
+    feed: (cursor?: string) => call<PostPage>("GET", `/posts?limit=12${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`),
+    myPosts: (cursor?: string) => call<PostPage>("GET", `/posts/mine?limit=12${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`),
+    getPost: (id: string) => call<PostView>("GET", `/posts/${encodeURIComponent(id)}`),
+    deletePost: (id: string) => call<void>("DELETE", `/posts/${encodeURIComponent(id)}`),
+    setLike: (id: string, liked: boolean) => call<void>(liked ? "PUT" : "DELETE", `/posts/${encodeURIComponent(id)}/like`),
+    reportPost: (id: string, reason: ReportReason) => call<void>("POST", `/posts/${encodeURIComponent(id)}/report`, { reason }),
 
     balance: () => call<{ balance: number }>("GET", "/credits/balance"),
     packs: () => call<PackView[]>("GET", "/credits/packs"),

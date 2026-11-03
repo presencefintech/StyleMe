@@ -19,3 +19,4 @@ export * from "./use-cases/auth/login";
 export * from "./use-cases/auth/confirm-age";
 export * from "./use-cases/privacy/purge-expired-data";
 export * from "./use-cases/privacy/delete-account";
+export * from "./use-cases/community/posts";

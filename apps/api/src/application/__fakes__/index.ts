@@ -1,7 +1,13 @@
+import { REPORT_HIDE_THRESHOLD } from "@styleme/shared";
 import type {
   GarmentRecord,
   GarmentRepository,
   VirtualTryOn,
+  FaceLock,
+  MakeupBlender,
+  PostRecord,
+  PostRepository,
+  PostWithStats,
   AccountDataRepository,
   AssetRecord,
   AssetRepository,
@@ -88,7 +94,9 @@ export class FakeStorage implements StorageService {
   readonly failDeleteFor = new Set<string>();
   async presignUpload(ref: ImageRef) { return { url: `https://storage.test/upload/${ref.bucket}/${ref.key}` }; }
   async presignDownload(ref: ImageRef) { return { url: `https://storage.test/dl/${ref.bucket}/${ref.key}` }; }
+  readonly copies: { from: ImageRef; to: ImageRef }[] = [];
   async put(ref: ImageRef) { this.puts.push(ref); }
+  async copy(from: ImageRef, to: ImageRef) { this.copies.push({ from, to }); }
   async delete(ref: ImageRef) {
     if (this.failDeleteFor.has(ref.key)) throw new Error("storage down");
     this.deletes.push(ref);
@@ -275,5 +283,71 @@ export class FakeTryOn implements VirtualTryOn {
     this.calls.push({ person, garment, category: opts.category, description: opts.description });
     if (this.failWith) throw this.failWith;
     return { bucket: "results", key: `${person.key}.tryon` };
+  }
+}
+
+export class FakeFaceLock implements FaceLock {
+  readonly calls: { original: ImageRef; edited: ImageRef }[] = [];
+  constructor(private failWith?: Error) {}
+  async restoreFace(original: ImageRef, edited: ImageRef): Promise<ImageRef> {
+    this.calls.push({ original, edited });
+    if (this.failWith) throw this.failWith;
+    return { bucket: "results", key: `${edited.key}.locked` };
+  }
+}
+
+export class InMemoryPostRepository implements PostRepository {
+  readonly items = new Map<string, PostRecord & { reportCount: number }>();
+  readonly likes = new Set<string>();
+  readonly reports = new Set<string>();
+  async save(p: PostRecord) {
+    const prev = this.items.get(p.id);
+    this.items.set(p.id, prev ? { ...prev, visibility: p.visibility, caption: p.caption } : { ...p, reportCount: 0 });
+  }
+  private stats(p: PostRecord & { reportCount: number }, viewerId: string): PostWithStats {
+    const likeCount = [...this.likes].filter((k) => k.startsWith(p.id + ":")).length;
+    return { ...p, likeCount, likedByMe: this.likes.has(p.id + ":" + viewerId), hidden: p.reportCount >= REPORT_HIDE_THRESHOLD };
+  }
+  async findById(id: string, viewerId: string) {
+    const p = this.items.get(id);
+    return p ? this.stats(p, viewerId) : null;
+  }
+  async findByJob(userId: string, jobId: string) {
+    return [...this.items.values()].find((p) => p.userId === userId && p.jobId === jobId) ?? null;
+  }
+  async delete(id: string) {
+    this.items.delete(id);
+    for (const k of [...this.likes]) if (k.startsWith(id + ":")) this.likes.delete(k);
+  }
+  private page(all: PostWithStats[], page: PageRequest): Page<PostWithStats> {
+    const start = page.cursor ? all.findIndex((p) => p.id === page.cursor) + 1 : 0;
+    const items = all.slice(start, start + page.limit);
+    return { items, nextCursor: start + page.limit < all.length ? (items[items.length - 1]?.id ?? null) : null };
+  }
+  async listPublic(viewerId: string, page: PageRequest) {
+    const all = [...this.items.values()].reverse().map((p) => this.stats(p, viewerId)).filter((p) => p.visibility === "PUBLIC" && !p.hidden);
+    return this.page(all, page);
+  }
+  async listByUser(userId: string, page: PageRequest) {
+    return this.page([...this.items.values()].reverse().filter((p) => p.userId === userId).map((p) => this.stats(p, userId)), page);
+  }
+  async setLike(postId: string, userId: string, liked: boolean) {
+    if (liked) this.likes.add(postId + ":" + userId);
+    else this.likes.delete(postId + ":" + userId);
+  }
+  async addReport(postId: string, userId: string) {
+    const key = postId + ":" + userId;
+    if (this.reports.has(key)) return;
+    this.reports.add(key);
+    const p = this.items.get(postId);
+    if (p) p.reportCount += 1;
+  }
+}
+
+export class FakeMakeupBlender implements MakeupBlender {
+  readonly calls: { original: ImageRef; edited: ImageRef }[] = [];
+  async blend(original: ImageRef, edited: ImageRef): Promise<ImageRef> {
+    this.calls.push({ original, edited });
+    return { bucket: "results", key: `${edited.key}.makeup` };
   }
 }

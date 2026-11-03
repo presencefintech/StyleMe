@@ -23,6 +23,12 @@ export class SupabaseStorageService implements StorageService {
     if (error) throw error;
   }
 
+  async copy(from: ImageRef, to: ImageRef) {
+    if (from.bucket !== to.bucket) throw new Error("copy: buckets différents non supportés");
+    const { error } = await this.sb.storage.from(from.bucket).copy(from.key, to.key);
+    if (error) throw error;
+  }
+
   async delete(ref: ImageRef) {
     const { error } = await this.sb.storage.from(ref.bucket).remove([ref.key]);
     if (error) throw error;

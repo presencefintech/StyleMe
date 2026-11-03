@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { MAX_PROMPT_LENGTH } from "../catalog";
+import { MAX_ACCESSORIES, MAX_CAPTION_LENGTH, MAX_PROMPT_LENGTH, POST_VISIBILITIES, REPORT_REASONS } from "../catalog";
 import { ASSET_KINDS, JOB_TYPES, OPERATORS } from "../enums";
 
 export const RegisterDto = z.object({
@@ -23,6 +23,11 @@ export const CreateJobDto = z
     fromJobId: z.string().min(1).optional(),
     /** Essayage virtuel : la tenue du catalogue à essayer. */
     garmentId: z.string().min(1).optional(),
+    /** Coiffure du catalogue (jobs HAIRSTYLE). */
+    hairstyleId: z.string().min(1).optional(),
+    /** Look composé (LOOK) : maquillage et accessoires ; styleId = l'occasion (fond). */
+    makeupId: z.string().min(1).optional(),
+    accessoryIds: z.array(z.string().min(1)).max(MAX_ACCESSORIES).default([]),
   })
   .refine((v) => v.type !== "EDIT" || !!v.prompt, { message: "prompt requis pour une édition", path: ["prompt"] })
   .refine((v) => v.type !== "ERASE" || (v.inputAssetIds.length === 2 && !v.fromJobId), {
@@ -33,6 +38,11 @@ export const CreateJobDto = z
     message: "un essayage exige une tenue et une photo",
     path: ["garmentId"],
   })
+  .refine((v) => v.type !== "LOOK" || (!v.fromJobId && v.inputAssetIds.length === 1 && !!(v.garmentId || v.hairstyleId || v.makeupId || v.accessoryIds.length || v.styleId)), {
+    message: "un look exige une photo et au moins une étape",
+    path: ["garmentId"],
+  })
+  .refine((v) => v.type !== "HAIRSTYLE" || !!v.hairstyleId, { message: "une coiffure est requise", path: ["hairstyleId"] })
   .refine((v) => (v.fromJobId ? v.inputAssetIds.length === 0 : v.inputAssetIds.length > 0), {
     message: "fournir soit inputAssetIds, soit fromJobId",
     path: ["inputAssetIds"],
@@ -56,3 +66,12 @@ export const SegmentDto = z.union([
 ]);
 /** Confirme une sélection de la gomme magique. */
 export const CommitSelectionDto = z.object({ selectionId: z.string().min(1).max(64) });
+
+/** Publier un look dans le fil. Le consentement explicite est obligatoire : la photo devient visible d'autres personnes. */
+export const PublishPostDto = z.object({
+  jobId: z.string().min(1),
+  visibility: z.enum(POST_VISIBILITIES).default("PUBLIC"),
+  caption: z.string().trim().max(MAX_CAPTION_LENGTH).optional(),
+  consent: z.literal(true),
+});
+export const ReportPostDto = z.object({ reason: z.enum(REPORT_REASONS) });

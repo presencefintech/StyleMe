@@ -13,6 +13,8 @@ enum JobType {
   EDIT
   ERASE
   TRYON
+  HAIRSTYLE
+  LOOK
 }
 
 enum GarmentCategory {
@@ -62,6 +64,7 @@ model User {
   createdAt      DateTime            @default(now())
   assets         Asset[]
   jobs           Job[]
+  posts          Post[]
   payments       Payment[]
   ledger         CreditTransaction[]
 }
@@ -108,6 +111,58 @@ model StyleTemplate {
   jobs       Job[]
 }
 
+enum PostVisibility {
+  PUBLIC
+  UNLISTED
+}
+
+/// Look publié dans le fil. L'image est une COPIE (results/<userId>/post-<id>.<ext>) : elle échappe à la purge des résultats
+/// et disparaît avec le post ou le compte. jobId/garmentId/hairstyleId sont de simples références (le job est purgé après 30 jours).
+model Post {
+  id          String         @id
+  userId      String
+  user        User           @relation(fields: [userId], references: [id])
+  jobId       String
+  imageKey    String
+  visibility  PostVisibility
+  caption     String?
+  garmentId   String?
+  hairstyleId String?
+  makeupId    String?
+  accessoryIds String[]       @default([])
+  /// Occasion (fond) du look : id d'un StyleTemplate, sans relation.
+  occasionId  String?
+  reportCount Int            @default(0)
+  createdAt   DateTime       @default(now())
+  likes       PostLike[]
+  reports     PostReport[]
+
+  @@unique([userId, jobId])
+  @@index([visibility, createdAt, id])
+  @@index([userId, createdAt])
+}
+
+model PostLike {
+  postId    String
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  userId    String
+  createdAt DateTime @default(now())
+
+  @@id([postId, userId])
+  @@index([userId])
+}
+
+model PostReport {
+  postId    String
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  userId    String
+  reason    String
+  createdAt DateTime @default(now())
+
+  @@id([postId, userId])
+  @@index([userId])
+}
+
 model Job {
   id             String         @id
   userId         String
@@ -118,6 +173,11 @@ model Job {
   style          StyleTemplate? @relation(fields: [styleId], references: [id])
   garmentId      String?
   garment        Garment?       @relation(fields: [garmentId], references: [id])
+  /// Coiffure du catalogue statique (packages/shared) : pas de table, donc pas de relation.
+  hairstyleId    String?
+  /// Look composé : maquillage et accessoires du catalogue statique (styleId = l'occasion).
+  makeupId       String?
+  accessoryIds   String[]       @default([])
   creditCost     Int
   status         JobStatus
   inputAssetIds  String[]

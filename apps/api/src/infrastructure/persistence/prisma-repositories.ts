@@ -9,10 +9,14 @@ import type {
   Page,
   PageRequest,
   PaymentRepository,
+  PostRecord,
+  PostRepository,
+  PostWithStats,
   StyleRepository,
   StyleSummary,
   UserRepository,
 } from "../../domain/ports";
+import { REPORT_HIDE_THRESHOLD } from "@styleme/shared";
 import { Job } from "../../domain/entities/job";
 import { Payment } from "../../domain/entities/payment";
 import { User } from "../../domain/entities/user";
@@ -29,6 +33,9 @@ export class PrismaJobRepository implements JobRepository {
       type: job.type,
       styleId: job.styleId ?? null,
       garmentId: job.garmentId ?? null,
+      hairstyleId: job.hairstyleId ?? null,
+      makeupId: job.makeupId ?? null,
+      accessoryIds: job.accessoryIds,
       prompt: job.prompt ?? null,
       creditCost: job.creditCost.value,
       status: job.status,
@@ -73,11 +80,11 @@ export class PrismaJobRepository implements JobRepository {
 }
 
 function toJob(r: {
-  id: string; userId: string; type: "ENHANCE" | "PHOTOSHOOT" | "EDIT" | "ERASE" | "TRYON"; styleId: string | null; garmentId: string | null; prompt: string | null; creditCost: number;
+  id: string; userId: string; type: "ENHANCE" | "PHOTOSHOOT" | "EDIT" | "ERASE" | "TRYON" | "HAIRSTYLE" | "LOOK"; styleId: string | null; garmentId: string | null; hairstyleId: string | null; makeupId: string | null; accessoryIds: string[]; prompt: string | null; creditCost: number;
   status: "PENDING" | "PROCESSING" | "DONE" | "REJECTED" | "FAILED"; inputAssetIds: string[]; outputAssetIds: string[]; errorReason: string | null; createdAt: Date;
 }): Job {
   return Job.restore({
-    id: r.id, userId: r.userId, type: r.type, styleId: r.styleId ?? undefined, garmentId: r.garmentId ?? undefined, prompt: r.prompt ?? undefined, creditCost: CreditAmount.of(r.creditCost),
+    id: r.id, userId: r.userId, type: r.type, styleId: r.styleId ?? undefined, garmentId: r.garmentId ?? undefined, hairstyleId: r.hairstyleId ?? undefined, makeupId: r.makeupId ?? undefined, accessoryIds: r.accessoryIds, prompt: r.prompt ?? undefined, creditCost: CreditAmount.of(r.creditCost),
     status: r.status, inputAssetIds: r.inputAssetIds, outputAssetIds: r.outputAssetIds, errorReason: r.errorReason ?? undefined, createdAt: r.createdAt,
   });
 }
@@ -157,6 +164,10 @@ export class PrismaAccountDataRepository implements AccountDataRepository {
   async erase(userId: string, at: Date) {
     const db = this.prisma.root;
     await db.$transaction([
+      // Fil : les likes/signalements faits par ce compte, puis ses posts (leurs likes/signalements partent en cascade). Les images sont sous results/<userId>/.
+      db.postLike.deleteMany({ where: { userId } }),
+      db.postReport.deleteMany({ where: { userId } }),
+      db.post.deleteMany({ where: { userId } }),
       db.moderationLog.deleteMany({ where: { job: { userId } } }),
       db.job.deleteMany({ where: { userId } }),
       db.asset.deleteMany({ where: { userId } }),
@@ -226,5 +237,83 @@ export class PrismaStyleRepository implements StyleRepository {
   async listActive(): Promise<StyleSummary[]> {
     const rows = await this.prisma.db.styleTemplate.findMany({ where: { active: true }, orderBy: { name: "asc" } });
     return rows.map((r) => ({ id: r.id, name: r.name, kind: r.kind, creditCost: r.creditCost, previewUrl: r.previewUrl ?? undefined }));
+  }
+}
+
+type PostRow = {
+  id: string; userId: string; jobId: string; imageKey: string; visibility: "PUBLIC" | "UNLISTED"; caption: string | null;
+  garmentId: string | null; hairstyleId: string | null; makeupId: string | null; accessoryIds: string[]; occasionId: string | null; reportCount: number; createdAt: Date;
+  _count: { likes: number }; likes: { userId: string }[];
+};
+
+function toPost(r: PostRow): PostWithStats {
+  return {
+    id: r.id, userId: r.userId, jobId: r.jobId, imageKey: r.imageKey, visibility: r.visibility, caption: r.caption ?? undefined,
+    garmentId: r.garmentId ?? undefined, hairstyleId: r.hairstyleId ?? undefined, makeupId: r.makeupId ?? undefined, accessoryIds: r.accessoryIds, occasionId: r.occasionId ?? undefined, createdAt: r.createdAt,
+    likeCount: r._count.likes, likedByMe: r.likes.length > 0, hidden: r.reportCount >= REPORT_HIDE_THRESHOLD,
+  };
+}
+
+export class PrismaPostRepository implements PostRepository {
+  constructor(private readonly prisma: PrismaService) {}
+
+  private include(viewerId: string) {
+    return { _count: { select: { likes: true } }, likes: { where: { userId: viewerId }, select: { userId: true } } } as const;
+  }
+
+  async save(p: PostRecord) {
+    const data = { visibility: p.visibility, caption: p.caption ?? null };
+    await this.prisma.db.post.upsert({
+      where: { id: p.id },
+      create: { id: p.id, userId: p.userId, jobId: p.jobId, imageKey: p.imageKey, garmentId: p.garmentId ?? null, hairstyleId: p.hairstyleId ?? null, makeupId: p.makeupId ?? null, accessoryIds: p.accessoryIds, occasionId: p.occasionId ?? null, ...data },
+      update: data,
+    });
+  }
+
+  async findById(id: string, viewerId: string) {
+    const r = await this.prisma.db.post.findUnique({ where: { id }, include: this.include(viewerId) });
+    return r ? toPost(r) : null;
+  }
+
+  async findByJob(userId: string, jobId: string) {
+    const r = await this.prisma.db.post.findUnique({ where: { userId_jobId: { userId, jobId } } });
+    return r
+      ? { id: r.id, userId: r.userId, jobId: r.jobId, imageKey: r.imageKey, visibility: r.visibility, caption: r.caption ?? undefined, garmentId: r.garmentId ?? undefined, hairstyleId: r.hairstyleId ?? undefined, makeupId: r.makeupId ?? undefined, accessoryIds: r.accessoryIds, occasionId: r.occasionId ?? undefined, createdAt: r.createdAt }
+      : null;
+  }
+
+  async delete(id: string) {
+    await this.prisma.db.post.deleteMany({ where: { id } });
+  }
+
+  private async list(where: object, viewerId: string, page: PageRequest): Promise<Page<PostWithStats>> {
+    const rows = await this.prisma.db.post.findMany({
+      where,
+      include: this.include(viewerId),
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: page.limit + 1,
+      ...(page.cursor ? { cursor: { id: page.cursor }, skip: 1 } : {}),
+    });
+    const items = rows.slice(0, page.limit).map(toPost);
+    return { items, nextCursor: rows.length > page.limit ? (items[items.length - 1]?.id ?? null) : null };
+  }
+
+  listPublic(viewerId: string, page: PageRequest) {
+    return this.list({ visibility: "PUBLIC", reportCount: { lt: REPORT_HIDE_THRESHOLD } }, viewerId, page);
+  }
+  listByUser(userId: string, page: PageRequest) {
+    return this.list({ userId }, userId, page);
+  }
+
+  async setLike(postId: string, userId: string, liked: boolean) {
+    if (liked) await this.prisma.db.postLike.upsert({ where: { postId_userId: { postId, userId } }, create: { postId, userId }, update: {} });
+    else await this.prisma.db.postLike.deleteMany({ where: { postId, userId } });
+  }
+
+  async addReport(postId: string, userId: string, reason: string) {
+    const existing = await this.prisma.db.postReport.findUnique({ where: { postId_userId: { postId, userId } } });
+    if (existing) return;
+    await this.prisma.db.postReport.create({ data: { postId, userId, reason } });
+    await this.prisma.db.post.update({ where: { id: postId }, data: { reportCount: { increment: 1 } } });
   }
 }

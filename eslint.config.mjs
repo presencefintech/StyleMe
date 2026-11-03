@@ -7,7 +7,7 @@ const forbiddenInCore = [
 ];
 
 export default tseslint.config(
-  { ignores: ["**/node_modules/**", "**/dist/**", "**/.next/**", "**/.venv/**", "**/next-env.d.ts"] },
+  { ignores: ["**/node_modules/**", "**/dist/**", "**/.next/**", "**/.venv/**", "**/next-env.d.ts", "apps/web/public/**"] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {

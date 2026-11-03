@@ -94,3 +94,41 @@ export interface StyleSummary {
 export interface StyleRepository {
   listActive(): Promise<StyleSummary[]>;
 }
+
+/** Look publié dans le fil. */
+export interface PostRecord {
+  id: string;
+  userId: string;
+  jobId: string;
+  /** Copie de l'image dans le bucket "results" (clé "<userId>/post-<id>.<ext>"). */
+  imageKey: string;
+  visibility: "PUBLIC" | "UNLISTED";
+  caption?: string;
+  garmentId?: string;
+  hairstyleId?: string;
+  makeupId?: string;
+  accessoryIds: string[];
+  /** Occasion (fond) du look. */
+  occasionId?: string;
+  createdAt: Date;
+}
+export interface PostWithStats extends PostRecord {
+  likeCount: number;
+  likedByMe: boolean;
+  /** Assez de signalements pour être masqué du fil (visible seulement de son auteure). */
+  hidden: boolean;
+}
+export interface PostRepository {
+  /** Crée ou met à jour (visibilité, légende) ; la clé unique est (userId, jobId). */
+  save(post: PostRecord): Promise<void>;
+  findById(id: string, viewerId: string): Promise<PostWithStats | null>;
+  findByJob(userId: string, jobId: string): Promise<PostRecord | null>;
+  delete(id: string): Promise<void>;
+  /** Fil public : PUBLIC et non masqués, plus récents d'abord. */
+  listPublic(viewerId: string, page: PageRequest): Promise<Page<PostWithStats>>;
+  listByUser(userId: string, page: PageRequest): Promise<Page<PostWithStats>>;
+  /** Idempotent. */
+  setLike(postId: string, userId: string, liked: boolean): Promise<void>;
+  /** Un signalement par personne et par post (idempotent) ; incrémente le compteur seulement la première fois. */
+  addReport(postId: string, userId: string, reason: string): Promise<void>;
+}

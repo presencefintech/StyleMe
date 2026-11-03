@@ -1,8 +1,11 @@
-import { err, OCCASION_PROMPTS, ok, type Result } from "@styleme/shared";
+import type { Job } from "../../../domain/entities/job";
+import { ACCESSORIES, accessoriesPrompt, err, HAIR_CLEAR_PROMPT, HAIRSTYLES, hairstylePrompt, MAKEUPS, makeupPrompt, OCCASION_PROMPTS, ok, type Result } from "@styleme/shared";
 import { DomainError, JobNotFound, ProviderFailure, ProviderRejectedContent } from "../../../domain/errors";
 import type {
   AssetRepository,
   BackgroundService,
+  FaceLock,
+  MakeupBlender,
   CreditLedgerRepository,
   GarmentRepository,
   ImageEditor,
@@ -31,6 +34,15 @@ export interface TryOnDeps {
   engine: VirtualTryOn;
 }
 
+/** Ce qu'il faut pour les jobs HAIRSTYLE : sans verrou du visage, on refuse de livrer (l'identité est la règle absolue). */
+export interface HairstyleDeps {
+  faceLock: FaceLock;
+  /** Supprime un fichier intermédiaire (au mieux). */
+  discard?: (ref: ImageRef) => Promise<void>;
+  /** Maquillage (jobs LOOK avec makeupId). */
+  makeupBlender?: MakeupBlender;
+}
+
 export class RunEnhancementJob {
   constructor(
     private readonly jobs: JobRepository,
@@ -44,6 +56,7 @@ export class RunEnhancementJob {
     private readonly unitOfWork: UnitOfWork,
     private readonly config: RunJobConfig = {},
     private readonly tryOn?: TryOnDeps,
+    private readonly hairstyle?: HairstyleDeps,
   ) {}
 
   /** Netteté supplémentaire, au mieux : si l'agrandissement échoue, on livre le résultat non agrandi (jamais d'échec ni de rejeu pour ça). */
@@ -61,6 +74,80 @@ export class RunEnhancementJob {
     const garment = garmentId ? await this.tryOn.garments.findActiveById(garmentId) : null;
     if (!garment) throw new Error("garment_missing");
     return this.tryOn.engine.tryOn(person, { bucket: garment.bucket, key: garment.key }, { category: garment.category, description: garment.description });
+  }
+
+  /** Coiffure : le modèle d'édition change les cheveux, puis le visage d'origine est recollé par-dessus. */
+  private async runHairstyle(hairstyleId: string | undefined, input: ImageRef): Promise<ImageRef> {
+    if (!this.hairstyle) throw new Error("Coiffure non configurée : définir REPLICATE_TOKEN et SIGHTENGINE_* sur l'API");
+    const style = HAIRSTYLES.find((h) => h.id === hairstyleId);
+    if (!style) throw new Error("hairstyle_missing");
+    // Deux passes : crâne dégagé, puis nouvelle coiffure. Le visage d'origine est recollé à la fin.
+    const cleared = await this.editor.edit(input, HAIR_CLEAR_PROMPT);
+    let styled: ImageRef;
+    try {
+      styled = await this.editor.edit(cleared, hairstylePrompt(style));
+    } finally {
+      await this.hairstyle.discard?.(cleared).catch(() => undefined);
+    }
+    return this.hairstyle.faceLock.restoreFace(input, styled);
+  }
+
+  private async discardAll(refs: ImageRef[]) {
+    for (const ref of refs) await this.hairstyle?.discard?.(ref).catch(() => undefined);
+  }
+
+  /** Maquillage : l'IA maquille, puis on ne garde que sa couleur sur le visage (structure d'origine). */
+  private async runMakeup(makeupId: string, input: ImageRef): Promise<ImageRef> {
+    const deps = this.hairstyle;
+    const style = MAKEUPS.find((m) => m.id === makeupId);
+    if (!deps?.makeupBlender || !style) throw new Error("Maquillage non configuré : définir REPLICATE_TOKEN et SIGHTENGINE_* sur l'API");
+    const edited = await this.editor.edit(input, makeupPrompt(style));
+    try {
+      return await deps.makeupBlender.blend(input, edited);
+    } finally {
+      await deps.discard?.(edited).catch(() => undefined);
+    }
+  }
+
+  /** Accessoires : une seule retouche pour tous, puis le visage d'origine est recollé. */
+  private async runAccessories(ids: string[], input: ImageRef): Promise<ImageRef> {
+    if (!this.hairstyle) throw new Error("Accessoires non configurés : définir REPLICATE_TOKEN et SIGHTENGINE_* sur l'API");
+    const list = ids.flatMap((id) => ACCESSORIES.filter((a) => a.id === id));
+    const edited = await this.editor.edit(input, accessoriesPrompt(list));
+    return this.hairstyle.faceLock.restoreFace(input, edited);
+  }
+
+  /** Occasion : on change le fond selon l'événement, puis le visage d'origine est recollé. */
+  private async runOccasion(styleId: string, input: ImageRef): Promise<ImageRef> {
+    const instruction = OCCASION_PROMPTS[styleId];
+    if (!this.hairstyle || !instruction) throw new Error("Occasion non configurée : définir REPLICATE_TOKEN et SIGHTENGINE_* sur l'API");
+    const edited = await this.editor.edit(input, instruction);
+    return this.hairstyle.faceLock.restoreFace(input, edited);
+  }
+
+  /**
+   * Look composé : les étapes choisies s'enchaînent sur la même photo, dans l'ordre tenue, coiffure, maquillage, accessoires, fond.
+   * Chaque étape part du résultat de la précédente ; les fichiers intermédiaires sont supprimés (aussi en cas d'échec).
+   */
+  private async runLook(job: Job, input: ImageRef): Promise<ImageRef> {
+    let current = input;
+    const temps: ImageRef[] = [];
+    const advance = (next: ImageRef) => {
+      if (current !== input) temps.push(current);
+      current = next;
+    };
+    try {
+      if (job.garmentId) advance(await this.runTryOn(job.garmentId, current));
+      if (job.hairstyleId) advance(await this.runHairstyle(job.hairstyleId, current));
+      if (job.makeupId) advance(await this.runMakeup(job.makeupId, current));
+      if (job.accessoryIds.length > 0) advance(await this.runAccessories(job.accessoryIds, current));
+      if (job.styleId) advance(await this.runOccasion(job.styleId, current));
+    } catch (e) {
+      await this.discardAll(current !== input ? [...temps, current] : temps);
+      throw e;
+    }
+    await this.discardAll(temps);
+    return current;
   }
 
   async execute(jobId: string, opts: RunOptions = {}): Promise<Result<void, DomainError>> {
@@ -116,6 +203,10 @@ export class RunEnhancementJob {
         out = await this.eraser.erase(input, { bucket: maskAsset.bucket, key: maskAsset.key });
       } else if (job.type === "TRYON") {
         out = await this.runTryOn(job.garmentId, input);
+      } else if (job.type === "LOOK") {
+        out = await this.runLook(job, input);
+      } else if (job.type === "HAIRSTYLE") {
+        out = await this.runHairstyle(job.hairstyleId, input);
       } else {
       // Génératif (retouche libre, ou occasion avec une consigne dédiée) : seul le fond/la demande change, le sujet est conservé.
       const instruction = job.type === "EDIT" ? job.prompt : job.styleId ? OCCASION_PROMPTS[job.styleId] : undefined;

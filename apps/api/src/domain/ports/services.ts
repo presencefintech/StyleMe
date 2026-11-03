@@ -33,6 +33,26 @@ export interface ObjectSelector {
 export interface VirtualTryOn {
   tryOn(person: ImageRef, garment: ImageRef, opts: { category: GarmentCategory; description?: string }): Promise<ImageRef>;
 }
+/** Boîte du visage, coordonnées normalisées 0..1. */
+export type FaceBox = { x0: number; y0: number; x1: number; y1: number };
+/** Localise le visage principal d'une photo (null = aucun). Sert à verrouiller l'identité pendant l'essayage. */
+export interface FaceLocator {
+  locate(src: ImageRef): Promise<FaceBox | null>;
+}
+/**
+ * Verrou d'identité : recolle le visage de la photo d'origine sur une version retouchée par l'IA (cheveux, tenue…
+ * restent ceux de la version retouchée). Lève une erreur si aucun visage n'est détecté.
+ */
+export interface FaceLock {
+  restoreFace(original: ImageRef, edited: ImageRef): Promise<ImageRef>;
+}
+/**
+ * Maquillage : combine la COULEUR de la version maquillée par l'IA avec la STRUCTURE (contours, yeux, détails fins) de la photo d'origine,
+ * sur le visage seulement. Le maquillage apparaît, les traits restent exactement ceux de la personne.
+ */
+export interface MakeupBlender {
+  blend(original: ImageRef, edited: ImageRef): Promise<ImageRef>;
+}
 /** Gomme : remplit la zone masquee de maniere naturelle. */
 export interface ObjectEraser {
   erase(image: ImageRef, mask: ImageRef): Promise<ImageRef>;
@@ -46,6 +66,8 @@ export interface StorageService {
   /** Lecture via URL signée à expiration courte (jamais de bucket public pour les photos). */
   presignDownload(ref: ImageRef, ttlSeconds?: number): Promise<{ url: string }>;
   put(ref: ImageRef, data: Uint8Array, contentType: string): Promise<void>;
+  /** Copie un fichier (même bucket) : sert à publier un look sans dépendre de la purge du résultat d'origine. */
+  copy(from: ImageRef, to: ImageRef): Promise<void>;
   delete(ref: ImageRef): Promise<void>;
   /** Supprime tous les fichiers dont la clé commence par `prefix` (ex. "<userId>/"). */
   deletePrefix(bucket: string, prefix: string): Promise<void>;

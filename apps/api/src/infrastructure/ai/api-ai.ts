@@ -1,5 +1,5 @@
 import type { GarmentCategory } from "@styleme/shared";
-import type { BackgroundService, ImageEditor, ImageEnhancer, ObjectEraser, ModerationResult, ModerationService, StorageService, VirtualTryOn } from "../../domain/ports";
+import type { BackgroundService, FaceBox, FaceLocator, ImageEditor, ImageEnhancer, ObjectEraser, ModerationResult, ModerationService, StorageService, VirtualTryOn } from "../../domain/ports";
 import { ProviderRejectedContent } from "../../domain/errors";
 import type { ImageRef } from "../../domain/value-objects/image-ref";
 import type { Fetch } from "./local-ai";
@@ -99,6 +99,33 @@ export class SightengineModeration implements ModerationService {
   }
 }
 
+/** Boîte du visage principal via Sightengine (coordonnées relatives x1,y1,x2,y2) : la plus grande si plusieurs. */
+export class SightengineFaceLocator implements FaceLocator {
+  constructor(
+    private readonly user: string,
+    private readonly secret: string,
+    private readonly storage: StorageService,
+    private readonly fetcher: Fetch = fetch,
+  ) {}
+
+  async locate(src: ImageRef): Promise<FaceBox | null> {
+    const { url } = await this.storage.presignDownload(src, 300);
+    const qs = new URLSearchParams({ url, models: "face-attributes", api_user: this.user, api_secret: this.secret });
+    const res = await this.fetcher(`https://api.sightengine.com/1.0/check.json?${qs}`);
+    if (!res.ok) throw new Error(`Sightengine responded ${res.status}`);
+    const body = (await res.json()) as { faces?: { x1?: number; y1?: number; x2?: number; y2?: number }[] };
+    const boxes = (body.faces ?? [])
+      .filter((f) => [f.x1, f.y1, f.x2, f.y2].every((v) => typeof v === "number" && v >= 0 && v <= 1) && f.x2! > f.x1! && f.y2! > f.y1!)
+      .map((f) => ({ x0: f.x1!, y0: f.y1!, x1: f.x2!, y1: f.y2! }));
+    boxes.sort((a, b) => (b.x1 - b.x0) * (b.y1 - b.y0) - (a.x1 - a.x0) * (a.y1 - a.y0));
+    return boxes[0] ?? null;
+  }
+}
+
+/** Réessais après un 429, et attente maximale entre deux essais. */
+const RATE_LIMIT_RETRIES = 4;
+const RATE_LIMIT_MAX_WAIT_MS = 20_000;
+
 interface ReplicatePrediction {
   status: string;
   output?: string | string[];
@@ -118,7 +145,15 @@ async function runReplicate(
   version?: string,
 ): Promise<string> {
   const headers = { authorization: `Bearer ${token}`, "content-type": "application/json" };
-  const res = await fetcher(endpoint, { method: "POST", headers: { ...headers, prefer: "wait" }, body: JSON.stringify(version ? { version, input } : { input }) });
+  // 429 = cadence limitée (comptes à faible crédit : quelques appels par minute). On attend le délai demandé puis on réessaie,
+  // au lieu de faire échouer le job : un essayage ou une coiffure enchaîne plusieurs appels coup sur coup.
+  let res: Response;
+  for (let attempt = 0; ; attempt++) {
+    res = await fetcher(endpoint, { method: "POST", headers: { ...headers, prefer: "wait" }, body: JSON.stringify(version ? { version, input } : { input }) });
+    if (res.status !== 429 || attempt >= RATE_LIMIT_RETRIES) break;
+    const retryAfter = ((await res.json().catch(() => ({}))) as { retry_after?: number }).retry_after;
+    await new Promise((r) => setTimeout(r, Math.min(Math.max((retryAfter ?? 5) * 1000, pollMs), RATE_LIMIT_MAX_WAIT_MS)));
+  }
   if (!res.ok) throw new Error(`Replicate responded ${res.status}`);
   let p = (await res.json()) as ReplicatePrediction;
 
@@ -215,6 +250,8 @@ export class ReplicateTryOn implements VirtualTryOn {
     private readonly newKey: () => string = () => crypto.randomUUID(),
     private readonly pollMs = 2000,
     private readonly maxWaitMs = 180_000,
+    /** false = la photo est déjà en 768×1024 (HeadLockTryOn la recadre lui-même, pour pouvoir recoller la tête). */
+    private readonly crop = true,
   ) {}
 
   async tryOn(person: ImageRef, garment: ImageRef, opts: { category: GarmentCategory; description?: string }): Promise<ImageRef> {
@@ -228,7 +265,7 @@ export class ReplicateTryOn implements VirtualTryOn {
         garm_img: garm.url,
         garment_des: opts.description ?? "garment",
         category: REPLICATE_CATEGORY[opts.category],
-        crop: true, // les photos des utilisateurs ne sont pas toutes en 3:4
+        crop: this.crop, // les photos des utilisateurs ne sont pas toutes en 3:4
         steps: 30,
       },
       this.pollMs,

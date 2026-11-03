@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { use, useEffect, useState } from "react";
 import { ResultActions, ResultViewer } from "@/components/photo";
+import { SharePost } from "@/components/share-post";
 import { Button, Card, Chip, ErrorNote, INPUT_CLASS, JobStatusPill, Screen } from "@/components/ui";
 import { ApiError, REJECTION_MESSAGES, errorMessage } from "@/lib/api";
 import { useApi } from "@/lib/providers";
@@ -110,11 +111,13 @@ export default function JobPage({ params }: { params: Promise<{ id: string }> })
   const qc = useQueryClient();
   const [before, setBefore] = useState<string | null>(null);
   const [parent, setParent] = useState<string | null>(null);
+  const [nextHair, setNextHair] = useState<string | null>(null);
 
   useEffect(() => {
     try {
       setBefore(sessionStorage.getItem(`before:${id}`));
       setParent(sessionStorage.getItem(`parent:${id}`));
+      setNextHair(sessionStorage.getItem(`nextHair:${id}`));
     } catch { /* indisponible */ }
   }, [id]);
 
@@ -138,7 +141,7 @@ export default function JobPage({ params }: { params: Promise<{ id: string }> })
       {parent && <Link href={`/jobs/${parent}`} className="text-caption text-ink-muted hover:text-ink">← Version précédente</Link>}
       <div className="flex items-center gap-md">
         <JobStatusPill status={j.status} />
-        {working && <span role="status" className="text-caption text-ink-muted">Cela prend généralement moins d'une minute.</span>}
+        {working && <span role="status" className="text-caption text-ink-muted">{j.type === "LOOK" ? "Un look complet peut prendre quelques minutes." : "Cela prend généralement moins d'une minute."}</span>}
       </div>
 
       <Card><Progress status={j.status} /></Card>
@@ -147,7 +150,17 @@ export default function JobPage({ params }: { params: Promise<{ id: string }> })
         <>
           <ResultViewer before={before ?? j.sourceUrl ?? null} after={output} />
           <ResultActions url={output} />
+          <SharePost jobId={id} />
           {j.type === "EDIT" && <ContinueEdit jobId={id} resultUrl={output} />}
+          {(j.type === "TRYON" || j.type === "HAIRSTYLE") && (
+            <Card className="flex flex-wrap items-center justify-between gap-md">
+              <div>
+                <p className="font-semibold">{j.type === "TRYON" ? "Et une coiffure assortie ?" : "Essayer une autre coiffure ?"}</p>
+                <p className="text-caption text-ink-muted">Continuez sur cette version de la photo : votre visage reste le vôtre.</p>
+              </div>
+              <Link href={`/hair?job=${id}${nextHair ? `&style=${encodeURIComponent(nextHair)}` : ""}`} className="inline-flex min-h-12 items-center justify-center rounded-sm bg-ink px-xl font-semibold text-bg transition hover:bg-ink/85">Choisir une coiffure</Link>
+            </Card>
+          )}
           {j.type === "ERASE" && (
             <Card className="flex flex-wrap items-center justify-between gap-md">
               <div>

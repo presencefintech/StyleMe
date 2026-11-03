@@ -33,6 +33,10 @@ export class ProviderFailure extends DomainError {}
 export class AssetNotFound extends DomainError {}
 /** Tenue inconnue ou retirée du catalogue. */
 export class GarmentNotFound extends DomainError {}
+export class HairstyleNotFound extends DomainError {}
+/** Look composé invalide : aucune étape, ou un élément inconnu du catalogue. */
+export class InvalidLook extends DomainError {}
+export class PostNotFound extends DomainError {}
 export class InvalidPrompt extends DomainError {}
 /** Le fournisseur d'IA a refusé le contenu (filtre de sécurité) : définitif, inutile de réessayer. */
 export class ProviderRejectedContent extends DomainError {}

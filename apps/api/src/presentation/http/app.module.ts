@@ -2,7 +2,7 @@ import { DynamicModule, Module, type INestApplication, type Type } from "@nestjs
 import { APP_FILTER, APP_GUARD } from "@nestjs/core";
 import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
 import { AllExceptionsFilter } from "./common";
-import { AssetsModule, AuthModule, CreditsModule, JobsModule, PaymentsModule } from "./features.module";
+import { AssetsModule, AuthModule, CommunityModule, CreditsModule, JobsModule, PaymentsModule } from "./features.module";
 
 export const API_PREFIX = "api/v1";
 
@@ -23,6 +23,7 @@ export class AppModule {
         JobsModule,
         CreditsModule,
         PaymentsModule,
+        CommunityModule,
       ],
       providers: [
         { provide: APP_FILTER, useClass: AllExceptionsFilter },

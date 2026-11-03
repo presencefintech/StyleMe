@@ -14,6 +14,7 @@ import {
   FakeTokenService,
   FixedClock,
   FakeTryOn,
+  InMemoryPostRepository,
   InMemoryAccountData,
   InMemoryGarmentRepository,
   InMemoryAssetRepository,
@@ -44,6 +45,7 @@ export function createInMemoryPorts() {
     accountData: new InMemoryAccountData(),
     garments: new InMemoryGarmentRepository([{ id: "wax", name: "Robe pagne", category: "DRESSES", description: "Robe en pagne", bucket: "garments", key: "wax.png" }]),
     tryOn: new FakeTryOn(),
+    posts: new InMemoryPostRepository(),
     styles: new InMemoryStyleRepository([{ id: "wedding", name: "Mariage", kind: "OCCASION", creditCost: 1 }]),
     moderation: new FakeModeration(),
     enhancer: new FakeEnhancer(),
@@ -70,7 +72,7 @@ export function createInMemoryPorts() {
   };
   const providers = [
     [T.JOBS, fakes.jobs], [T.LEDGER, fakes.ledger], [T.PAYMENTS, fakes.payments], [T.USERS, fakes.users],
-    [T.ASSETS, fakes.assets], [T.ACCOUNT_DATA, fakes.accountData], [T.GARMENTS, fakes.garments], [T.TRYON, fakes.tryOn], [T.STYLES, fakes.styles], [T.MODERATION, fakes.moderation], [T.ENHANCER, fakes.enhancer],
+    [T.ASSETS, fakes.assets], [T.ACCOUNT_DATA, fakes.accountData], [T.GARMENTS, fakes.garments], [T.TRYON, fakes.tryOn], [T.POSTS, fakes.posts], [T.STYLES, fakes.styles], [T.MODERATION, fakes.moderation], [T.ENHANCER, fakes.enhancer],
     [T.BACKGROUND, fakes.background], [T.EDITOR, fakes.editor], [T.ERASER, fakes.eraser], [T.SELECTOR, fakes.selector], [T.STORAGE, fakes.storage], [T.GATEWAY, fakes.gateway], [T.PASSWORD, fakes.password],
     [T.TOKEN_ISSUER, fakes.tokens], [T.TOKEN_VERIFIER, verifier], [T.QUEUE, fakes.queue], [T.UOW, fakes.uow],
     [T.IDS, fakes.ids], [T.CLOCK, fakes.clock], [T.PUSH, fakes.push], [T.IDEMPOTENCY, fakes.idempotency],

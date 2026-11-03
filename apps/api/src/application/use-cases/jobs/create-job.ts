@@ -1,6 +1,6 @@
-import { err, JOB_BASE_COST, MAX_PROMPT_LENGTH, ok, type JobType, type Result } from "@styleme/shared";
+import { ACCESSORIES, BACKGROUND_PRESETS, err, HAIRSTYLES, JOB_BASE_COST, lookCost, MAKEUPS, MAX_PROMPT_LENGTH, ok, type JobType, type Result } from "@styleme/shared";
 import { Job } from "../../../domain/entities/job";
-import { AgeNotConfirmed, AssetNotFound, DomainError, GarmentNotFound, InsufficientCredits, InvalidPrompt, JobNotFound, UserNotFound } from "../../../domain/errors";
+import { AgeNotConfirmed, AssetNotFound, DomainError, GarmentNotFound, HairstyleNotFound, InsufficientCredits, InvalidLook, InvalidPrompt, JobNotFound, UserNotFound } from "../../../domain/errors";
 import type {
   AssetRecord,
   AssetRepository,
@@ -25,6 +25,11 @@ export interface CreateJobInput {
   fromJobId?: string;
   /** Essayage virtuel : tenue du catalogue (TRYON uniquement). */
   garmentId?: string;
+  /** Coiffure du catalogue (HAIRSTYLE uniquement). */
+  hairstyleId?: string;
+  /** Look composé (LOOK) : maquillage et accessoires ; styleId = l'occasion (fond). */
+  makeupId?: string;
+  accessoryIds?: string[];
 }
 
 export class CreateJob {
@@ -56,14 +61,32 @@ export class CreateJob {
       if (!(await this.garments.findActiveById(input.garmentId))) return err(new GarmentNotFound());
     }
 
+    // Coiffure : une coiffure du catalogue ; la photo vient d'un upload OU du résultat d'un job précédent (ex. essayage).
+    if (input.type === "HAIRSTYLE" && !HAIRSTYLES.some((h) => h.id === input.hairstyleId)) return err(new HairstyleNotFound());
+
+    // Look composé : une photo + au moins une étape, chacune connue du catalogue. Le prix est la somme des étapes choisies.
+    if (input.type === "LOOK") {
+      const accessoryIds = input.accessoryIds ?? [];
+      const steps = input.garmentId || input.hairstyleId || input.makeupId || accessoryIds.length > 0 || input.styleId;
+      if (!steps || input.inputAssetIds.length !== 1 || input.fromJobId) return err(new InvalidLook());
+      if (input.hairstyleId && !HAIRSTYLES.some((h) => h.id === input.hairstyleId)) return err(new HairstyleNotFound());
+      if (input.makeupId && !MAKEUPS.some((m) => m.id === input.makeupId)) return err(new InvalidLook());
+      if (new Set(accessoryIds).size !== accessoryIds.length || !accessoryIds.every((id) => ACCESSORIES.some((a) => a.id === id))) return err(new InvalidLook());
+      if (input.styleId && !(input.styleId in BACKGROUND_PRESETS)) return err(new InvalidLook());
+      if (input.garmentId && !(await this.garments?.findActiveById(input.garmentId))) return err(new GarmentNotFound());
+    }
+
     let inputAssetIds = input.inputAssetIds;
     let chained: AssetRecord | undefined;
+    /** Coiffure enchaînée après un essayage : le look garde sa tenue. */
+    let inheritedGarmentId: string | undefined;
     if (input.fromJobId) {
-      if (input.type !== "EDIT") return err(new AssetNotFound());
+      if (input.type !== "EDIT" && input.type !== "HAIRSTYLE") return err(new AssetNotFound());
       const prev = await this.jobs.findById(input.fromJobId);
       const outputKey = prev?.outputAssetIds[0];
       // 404 aussi pour le job d'un autre utilisateur : on ne révèle pas son existence.
       if (!prev || prev.userId !== input.userId || prev.status !== "DONE" || !outputKey) return err(new JobNotFound());
+      if (input.type === "HAIRSTYLE") inheritedGarmentId = prev.garmentId;
       // Le même résultat peut être repris plusieurs fois : on réutilise son enregistrement (bucket + key uniques).
       const existing = await this.assets.findByRef(RESULTS_BUCKET, outputKey);
       if (existing && existing.userId !== input.userId) return err(new AssetNotFound());
@@ -76,7 +99,11 @@ export class CreateJob {
       if (!allOwned) return err(new AssetNotFound());
     }
 
-    const cost = CreditAmount.of(JOB_BASE_COST[input.type]);
+    const cost = CreditAmount.of(
+      input.type === "LOOK"
+        ? lookCost({ garmentId: input.garmentId, hairstyleId: input.hairstyleId, makeupId: input.makeupId, accessoryIds: input.accessoryIds, styleId: input.styleId })
+        : JOB_BASE_COST[input.type],
+    );
     const balance = await this.ledger.balanceOf(input.userId);
     if (!balance.isGreaterOrEqual(cost)) return err(new InsufficientCredits());
 
@@ -86,7 +113,10 @@ export class CreateJob {
       userId: input.userId,
       type: input.type,
       styleId: input.styleId,
-      garmentId: input.type === "TRYON" ? input.garmentId : undefined,
+      garmentId: input.type === "TRYON" || input.type === "LOOK" ? input.garmentId : inheritedGarmentId,
+      hairstyleId: input.type === "HAIRSTYLE" || input.type === "LOOK" ? input.hairstyleId : undefined,
+      makeupId: input.type === "LOOK" ? input.makeupId : undefined,
+      accessoryIds: input.type === "LOOK" ? [...(input.accessoryIds ?? [])] : undefined,
       prompt: input.type === "EDIT" ? prompt : undefined,
       creditCost: cost,
       inputAssetIds,

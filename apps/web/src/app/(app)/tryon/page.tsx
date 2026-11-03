@@ -3,8 +3,8 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { JOB_BASE_COST, type GarmentCategory } from "@styleme/shared";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useState } from "react";
 import { PhotoPicker } from "@/components/photo";
 import { Button, Card, ErrorNote, Screen, cx } from "@/components/ui";
 import { ApiError, errorMessage } from "@/lib/api";
@@ -15,13 +15,16 @@ import { useApi } from "@/lib/providers";
 const COST = JOB_BASE_COST.TRYON;
 const CATEGORY_LABEL: Record<GarmentCategory, string> = { DRESSES: "Robes", UPPER_BODY: "Hauts", LOWER_BODY: "Bas" };
 
-export default function TryOnPage() {
+function TryOnPage() {
   const api = useApi();
   const router = useRouter();
   const qc = useQueryClient();
   const balance = useBalance();
   const garments = useGarments();
-  const [garmentId, setGarmentId] = useState<string | null>(null);
+  /** « Essayer ce look » : tenue (et coiffure à enchaîner ensuite) venues d'un look du fil. */
+  const params = useSearchParams();
+  const nextHair = params.get("hair");
+  const [garmentId, setGarmentId] = useState<string | null>(params.get("garment"));
   const [file, setFile] = useState<File | null>(null);
   const [step, setStep] = useState<"idle" | "uploading" | "creating">("idle");
   const [error, setError] = useState<string | null>(null);
@@ -39,6 +42,7 @@ export default function TryOnPage() {
       const { jobId } = await api.createJob({ type: "TRYON", garmentId, inputAssetIds: [assetId] });
       void qc.invalidateQueries({ queryKey: keys.jobs });
       try { sessionStorage.setItem(`before:${jobId}`, await toDataUrl(file)); } catch { /* quota/privé */ }
+      try { if (nextHair) sessionStorage.setItem(`nextHair:${jobId}`, nextHair); } catch { /* privé */ }
       router.push(`/jobs/${jobId}`);
     } catch (e) {
       setNeedCredits(e instanceof ApiError && e.status === 402);
@@ -50,6 +54,8 @@ export default function TryOnPage() {
   const busy = step !== "idle";
   const lacking = balance.data !== undefined && balance.data.balance < COST;
   const list = garments.data ?? [];
+  // Une tenue retirée du catalogue depuis la publication du look ne peut plus être essayée.
+  const chosen = garmentId !== null && list.some((g) => g.id === garmentId);
   const groups = (Object.keys(CATEGORY_LABEL) as GarmentCategory[])
     .map((category) => ({ category, items: list.filter((g) => g.category === category) }))
     .filter((g) => g.items.length > 0);
@@ -110,12 +116,20 @@ export default function TryOnPage() {
       <ErrorNote message={error} />
       {needCredits && <Link href="/credits" className="text-accent-ink underline">Acheter des crédits</Link>}
 
-      <Button onClick={start} disabled={!file || !garmentId || lacking} loading={busy} className="w-full">
+      <Button onClick={start} disabled={!file || !chosen || lacking} loading={busy} className="w-full">
         {step === "uploading" ? "Envoi de la photo…" : step === "creating" ? "Lancement…" : `Essayer cette tenue · ${COST} crédits`}
       </Button>
       <p className="text-center text-tiny text-ink-muted">
         Le rendu est une simulation : les motifs très détaillés peuvent être simplifiés. Les crédits ne sont débités que si le résultat vous est livré.
       </p>
     </Screen>
+  );
+}
+
+export default function Page() {
+  return (
+    <Suspense fallback={null}>
+      <TryOnPage />
+    </Suspense>
   );
 }

@@ -1,4 +1,4 @@
-export const JOB_TYPES = ["ENHANCE", "PHOTOSHOOT", "EDIT", "ERASE", "TRYON"] as const;
+export const JOB_TYPES = ["ENHANCE", "PHOTOSHOOT", "EDIT", "ERASE", "TRYON", "HAIRSTYLE", "LOOK"] as const;
 export type JobType = (typeof JOB_TYPES)[number];
 
 /** Catégorie d'une tenue : le modèle d'essayage doit savoir quelle partie du corps habiller. */

@@ -1,12 +1,14 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   Inject,
   Module,
   Param,
   Post,
+  Put,
   Query,
   Req,
   UseGuards,
@@ -25,6 +27,8 @@ import {
   InitiatePaymentDto,
   CommitSelectionDto,
   PresignDto,
+  PublishPostDto,
+  ReportPostDto,
   SegmentDto,
   LoginDto,
   RegisterDto,
@@ -49,6 +53,13 @@ import {
   SegmentObject,
   Login,
   Register,
+  PublishPost,
+  UnpublishPost,
+  ListFeed,
+  ListMyPosts,
+  GetPost,
+  SetPostLike,
+  ReportPost,
 } from "../../application";
 import { AuthUser, CurrentUser, IdempotencyInterceptor, JwtGuard, T, jobView, parseBody, unwrap } from "./common";
 
@@ -327,3 +338,89 @@ class PaymentsController {
   ],
 })
 export class PaymentsModule {}
+
+// --- Fil communautaire --------------------------------------------------------------------
+
+function pageParams(cursor?: string, limit?: string) {
+  const n = limit === undefined ? undefined : Number(limit);
+  if (n !== undefined && !Number.isInteger(n)) throw new BadRequestException("limit must be an integer");
+  return { cursor, limit: n };
+}
+
+@Controller("posts")
+@UseGuards(JwtGuard)
+class PostsController {
+  constructor(
+    @Inject(PublishPost) private readonly publish: PublishPost,
+    @Inject(UnpublishPost) private readonly unpublish: UnpublishPost,
+    @Inject(ListFeed) private readonly feed: ListFeed,
+    @Inject(ListMyPosts) private readonly mine: ListMyPosts,
+    @Inject(GetPost) private readonly getPost: GetPost,
+    @Inject(SetPostLike) private readonly like: SetPostLike,
+    @Inject(ReportPost) private readonly report: ReportPost,
+  ) {}
+
+  @Post()
+  @HttpCode(201)
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
+  async create(@CurrentUser() user: AuthUser, @Body() body: unknown) {
+    const { jobId, visibility, caption } = parseBody(PublishPostDto, body);
+    return unwrap(await this.publish.execute({ userId: user.id, jobId, visibility, caption }));
+  }
+
+  @Get()
+  async list(@CurrentUser() user: AuthUser, @Query("cursor") cursor?: string, @Query("limit") limit?: string) {
+    return unwrap(await this.feed.execute({ userId: user.id, ...pageParams(cursor, limit) }));
+  }
+
+  // Déclaré avant ":id" pour ne pas être pris pour un identifiant.
+  @Get("mine")
+  async listMine(@CurrentUser() user: AuthUser, @Query("cursor") cursor?: string, @Query("limit") limit?: string) {
+    return unwrap(await this.mine.execute({ userId: user.id, ...pageParams(cursor, limit) }));
+  }
+
+  @Get(":id")
+  async get(@CurrentUser() user: AuthUser, @Param("id") id: string) {
+    return unwrap(await this.getPost.execute({ userId: user.id, postId: id }));
+  }
+
+  @Delete(":id")
+  @HttpCode(204)
+  async remove(@CurrentUser() user: AuthUser, @Param("id") id: string) {
+    unwrap(await this.unpublish.execute({ userId: user.id, postId: id }));
+  }
+
+  @Put(":id/like")
+  @HttpCode(204)
+  async setLike(@CurrentUser() user: AuthUser, @Param("id") id: string) {
+    unwrap(await this.like.execute({ userId: user.id, postId: id, liked: true }));
+  }
+
+  @Delete(":id/like")
+  @HttpCode(204)
+  async unsetLike(@CurrentUser() user: AuthUser, @Param("id") id: string) {
+    unwrap(await this.like.execute({ userId: user.id, postId: id, liked: false }));
+  }
+
+  @Post(":id/report")
+  @HttpCode(204)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  async reportPost(@CurrentUser() user: AuthUser, @Param("id") id: string, @Body() body: unknown) {
+    unwrap(await this.report.execute({ userId: user.id, postId: id, reason: parseBody(ReportPostDto, body).reason }));
+  }
+}
+
+@Module({
+  controllers: [PostsController],
+  providers: [
+    JwtGuard,
+    useCase(PublishPost, [T.USERS, T.JOBS, T.POSTS, T.STORAGE, T.IDS]),
+    useCase(UnpublishPost, [T.POSTS, T.STORAGE]),
+    useCase(ListFeed, [T.USERS, T.POSTS, T.STORAGE]),
+    useCase(ListMyPosts, [T.POSTS, T.STORAGE]),
+    useCase(GetPost, [T.POSTS, T.STORAGE]),
+    useCase(SetPostLike, [T.POSTS]),
+    useCase(ReportPost, [T.POSTS]),
+  ],
+})
+export class CommunityModule {}

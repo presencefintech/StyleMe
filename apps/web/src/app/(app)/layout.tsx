@@ -12,8 +12,11 @@ import { useBalance } from "@/features/queries";
 import { useApi, useAuth } from "@/lib/providers";
 
 const NAV: { href: string; label: string; icon: IconName }[] = [
+  { href: "/look", label: "Mon look", icon: "look" },
   { href: "/enhance", label: "Occasions", icon: "occasions" },
   { href: "/tryon", label: "Habillage", icon: "tryon" },
+  { href: "/hair", label: "Coiffure", icon: "hair" },
+  { href: "/feed", label: "Fil", icon: "feed" },
   { href: "/edit", label: "Retoucher", icon: "edit" },
   { href: "/erase", label: "Gomme", icon: "erase" },
   { href: "/history", label: "Historique", icon: "history" },
@@ -117,7 +120,7 @@ function Navigation() {
       </header>
 
       {/* Mobile : barre d'onglets */}
-      <nav aria-label="Navigation mobile" className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t-2 border-ink bg-bg pb-[env(safe-area-inset-bottom)] md:hidden">
+      <nav aria-label="Navigation mobile" className="fixed inset-x-0 bottom-0 z-30 flex overflow-x-auto border-t-2 border-ink bg-bg pb-[env(safe-area-inset-bottom)] md:hidden">
         {NAV.map((n) => {
           const active = isActive(n.href);
           return (
@@ -125,7 +128,7 @@ function Navigation() {
               key={n.href}
               href={n.href}
               aria-current={active ? "page" : undefined}
-              className={cx("flex flex-col items-center justify-center gap-1 py-sm text-tiny", active ? "bg-accent font-bold text-ink" : "font-medium text-ink-muted")}
+              className={cx("flex min-w-[76px] flex-1 shrink-0 flex-col items-center justify-center gap-1 py-sm text-tiny", active ? "bg-accent font-bold text-ink" : "font-medium text-ink-muted")}
             >
               <Icon name={n.icon} size={22} />
               {n.label}

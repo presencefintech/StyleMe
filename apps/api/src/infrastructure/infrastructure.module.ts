@@ -4,9 +4,10 @@ import { createClient } from "@supabase/supabase-js";
 import { Redis } from "ioredis";
 import type { Worker } from "bullmq";
 import { PurgeExpiredData, RunEnhancementJob } from "../application";
-import type { BackgroundService, GarmentRepository, ImageEditor, ImageEnhancer, ModerationService, ObjectEraser, ObjectSelector, PushService, UnitOfWork, VirtualTryOn } from "../domain/ports";
+import type { BackgroundService, GarmentRepository, ImageEditor, FaceLock, ImageEnhancer, MakeupBlender, ModerationService, ObjectEraser, ObjectSelector, PushService, UnitOfWork, VirtualTryOn } from "../domain/ports";
 import { T, type IdempotencyStore, type TokenVerifier } from "../presentation/http/common";
-import { RemoveBgBackground, ReplicateEditor, ReplicateEnhancer, ReplicateEraser, ReplicateTryOn, SightengineModeration, UnconfiguredEditor, UnconfiguredEraser, UnconfiguredTryOn } from "./ai/api-ai";
+import { HeadFaceLock, HeadLockTryOn, HeadMakeupBlender } from "./ai/head-lock";
+import { RemoveBgBackground, ReplicateEditor, ReplicateEnhancer, ReplicateEraser, ReplicateTryOn, SightengineFaceLocator, SightengineModeration, UnconfiguredEditor, UnconfiguredEraser, UnconfiguredTryOn } from "./ai/api-ai";
 import { LocalBackground, LocalEnhancer, LocalModeration, LocalObjectSelector } from "./ai/local-ai";
 import { JwtTokenService, ScryptPasswordHasher } from "./auth/auth-adapters";
 import { LogPushService, SystemClock, UuidGenerator } from "./common/common";
@@ -18,6 +19,7 @@ import {
   PrismaAssetRepository,
   PrismaCreditLedgerRepository,
   PrismaGarmentRepository,
+  PrismaPostRepository,
   PrismaJobRepository,
   PrismaPaymentRepository,
   PrismaStyleRepository,
@@ -121,6 +123,7 @@ export class InfrastructureModule {
       { provide: T.USERS, useFactory: (p: PrismaService) => new PrismaUserRepository(p), inject: [PrismaService] },
       { provide: T.ASSETS, useFactory: (p: PrismaService) => new PrismaAssetRepository(p), inject: [PrismaService] },
       { provide: T.ACCOUNT_DATA, useFactory: (p: PrismaService) => new PrismaAccountDataRepository(p), inject: [PrismaService] },
+      { provide: T.POSTS, useFactory: (p: PrismaService) => new PrismaPostRepository(p), inject: [PrismaService] },
       { provide: T.GARMENTS, useFactory: (p: PrismaService) => new PrismaGarmentRepository(p), inject: [PrismaService] },
       { provide: T.STYLES, useFactory: (p: PrismaService) => new PrismaStyleRepository(p), inject: [PrismaService] },
       {
@@ -166,8 +169,27 @@ export class InfrastructureModule {
       },
       {
         provide: T.TRYON,
-        useFactory: (storage: SupabaseStorageService): VirtualTryOn =>
-          env.REPLICATE_TOKEN ? new ReplicateTryOn(env.REPLICATE_TOKEN, env.REPLICATE_TRYON_VERSION, storage) : new UnconfiguredTryOn(),
+        useFactory: (storage: SupabaseStorageService): VirtualTryOn => {
+          if (!env.REPLICATE_TOKEN) return new UnconfiguredTryOn();
+          // Verrou d'identité : on recolle la tête d'origine sur le résultat. Nécessite de localiser le visage (Sightengine) ;
+          // sans ces identifiants, on garde le moteur seul (le visage peut alors légèrement changer).
+          if (!env.SIGHTENGINE_USER || !env.SIGHTENGINE_SECRET) return new ReplicateTryOn(env.REPLICATE_TOKEN, env.REPLICATE_TRYON_VERSION, storage);
+          const engine = new ReplicateTryOn(env.REPLICATE_TOKEN, env.REPLICATE_TRYON_VERSION, storage, fetch, undefined, undefined, undefined, false);
+          return new HeadLockTryOn(engine, storage, new SightengineFaceLocator(env.SIGHTENGINE_USER, env.SIGHTENGINE_SECRET, storage));
+        },
+        inject: [T.STORAGE],
+      },
+      {
+        provide: T.FACE_LOCK,
+        // Sans Sightengine (localisation du visage), pas de verrou : les jobs HAIRSTYLE échouent plutôt que de risquer l'identité.
+        useFactory: (storage: SupabaseStorageService): FaceLock | null =>
+          env.SIGHTENGINE_USER && env.SIGHTENGINE_SECRET ? new HeadFaceLock(storage, new SightengineFaceLocator(env.SIGHTENGINE_USER, env.SIGHTENGINE_SECRET, storage)) : null,
+        inject: [T.STORAGE],
+      },
+      {
+        provide: T.MAKEUP_BLENDER,
+        useFactory: (storage: SupabaseStorageService): MakeupBlender | null =>
+          env.SIGHTENGINE_USER && env.SIGHTENGINE_SECRET ? new HeadMakeupBlender(storage, new SightengineFaceLocator(env.SIGHTENGINE_USER, env.SIGHTENGINE_SECRET, storage)) : null,
         inject: [T.STORAGE],
       },
       {
@@ -232,18 +254,18 @@ export class InfrastructureModule {
           jobs: PrismaJobRepository,
           ledger: PrismaCreditLedgerRepository,
           assets: PrismaAssetRepository,
-          ...rest: [ModerationService, ImageEnhancer, BackgroundService, ImageEditor, ObjectEraser, UnitOfWork, VirtualTryOn, GarmentRepository]
+          ...rest: [ModerationService, ImageEnhancer, BackgroundService, ImageEditor, ObjectEraser, UnitOfWork, VirtualTryOn, GarmentRepository, FaceLock | null, SupabaseStorageService, MakeupBlender | null]
         ) => {
-          const [moderation, enhancer, background, editor, eraser, uow, engine, garments] = rest;
-          return new RunEnhancementJob(jobs, ledger, assets, moderation, enhancer, background, editor, eraser, uow, { upscaleResults: env.UPSCALE_RESULTS === "true" }, { garments, engine });
+          const [moderation, enhancer, background, editor, eraser, uow, engine, garments, faceLock, storage, makeupBlender] = rest;
+          return new RunEnhancementJob(jobs, ledger, assets, moderation, enhancer, background, editor, eraser, uow, { upscaleResults: env.UPSCALE_RESULTS === "true" }, { garments, engine }, env.REPLICATE_TOKEN && faceLock ? { faceLock, discard: (ref) => storage.delete(ref), makeupBlender: makeupBlender ?? undefined } : undefined);
         },
-        inject: [T.JOBS, T.LEDGER, T.ASSETS, T.MODERATION, T.ENHANCER, T.BACKGROUND, T.EDITOR, T.ERASER, T.UOW, T.TRYON, T.GARMENTS],
+        inject: [T.JOBS, T.LEDGER, T.ASSETS, T.MODERATION, T.ENHANCER, T.BACKGROUND, T.EDITOR, T.ERASER, T.UOW, T.TRYON, T.GARMENTS, T.FACE_LOCK, T.STORAGE, T.MAKEUP_BLENDER],
       },
       ...(env.REDIS_URL ? [QueueRuntime] : []),
       ...(env.RETENTION_ENABLED === "true" ? [RetentionRuntime] : []),
     ];
     const exported = [
-      PrismaService, T.UOW, T.JOBS, T.LEDGER, T.PAYMENTS, T.USERS, T.ASSETS, T.ACCOUNT_DATA, T.GARMENTS, T.STYLES, T.IDEMPOTENCY, T.IDS, T.CLOCK, T.PUSH,
+      PrismaService, T.UOW, T.JOBS, T.LEDGER, T.PAYMENTS, T.USERS, T.ASSETS, T.ACCOUNT_DATA, T.GARMENTS, T.POSTS, T.STYLES, T.IDEMPOTENCY, T.IDS, T.CLOCK, T.PUSH,
       T.STORAGE, T.QUEUE, T.ENHANCER, T.BACKGROUND, T.EDITOR, T.ERASER, T.SELECTOR, T.MODERATION, T.GATEWAY, T.PASSWORD, T.TOKEN_ISSUER, T.TOKEN_VERIFIER,
     ];
     return {

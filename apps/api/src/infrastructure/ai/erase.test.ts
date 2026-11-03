@@ -36,6 +36,19 @@ describe("ReplicateEraser", () => {
     await expect(e.erase({ bucket: "results", key: "u/i" }, { bucket: "results", key: "u/m" })).rejects.toBeInstanceOf(ProviderRejectedContent);
   });
 
+  it("429 (cadence limitée) : attend puis réessaie au lieu d'échouer ; abandonne après plusieurs refus", async () => {
+    const limited = { ok: false, status: 429, json: async () => ({ retry_after: 0 }) } as Response;
+    const fetcher = vi.fn().mockResolvedValueOnce(limited).mockResolvedValueOnce(limited).mockResolvedValueOnce(json({ status: "succeeded", output: "https://rep/out.png" })).mockResolvedValueOnce(file);
+    const e = new ReplicateEraser("t", "bria/eraser", new FakeStorage(), fetcher as unknown as typeof fetch, () => "k", 1, 5000);
+    await expect(e.erase({ bucket: "results", key: "u/i" }, { bucket: "results", key: "u/m" })).resolves.toMatchObject({ key: "u/k.png" });
+    expect(fetcher).toHaveBeenCalledTimes(4);
+
+    const always = vi.fn().mockResolvedValue(limited);
+    const stuck = new ReplicateEraser("t", "bria/eraser", new FakeStorage(), always as unknown as typeof fetch, () => "k", 1, 5000);
+    await expect(stuck.erase({ bucket: "results", key: "u/i" }, { bucket: "results", key: "u/m" })).rejects.toThrow("Replicate responded 429");
+    expect(always).toHaveBeenCalledTimes(5);
+  });
+
   it("sans token, la gomme échoue clairement", async () => {
     await expect(new UnconfiguredEraser().erase()).rejects.toThrow(/REPLICATE_TOKEN/);
   });

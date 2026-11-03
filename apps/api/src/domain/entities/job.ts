@@ -9,6 +9,11 @@ export interface JobProps {
   styleId?: string;
   /** Tenue essayée (jobs TRYON). */
   garmentId?: string;
+  /** Coiffure appliquée (jobs HAIRSTYLE). */
+  hairstyleId?: string;
+  /** Maquillage et accessoires (jobs LOOK). */
+  makeupId?: string;
+  accessoryIds?: string[];
   /** Instruction libre (jobs EDIT). */
   prompt?: string;
   creditCost: CreditAmount;
@@ -29,6 +34,9 @@ export class Job {
     type: JobType;
     styleId?: string;
     garmentId?: string;
+    hairstyleId?: string;
+    makeupId?: string;
+    accessoryIds?: string[];
     prompt?: string;
     creditCost: CreditAmount;
     inputAssetIds: string[];
@@ -44,6 +52,9 @@ export class Job {
   get type() { return this.props.type; }
   get styleId() { return this.props.styleId; }
   get garmentId() { return this.props.garmentId; }
+  get hairstyleId() { return this.props.hairstyleId; }
+  get makeupId() { return this.props.makeupId; }
+  get accessoryIds() { return [...(this.props.accessoryIds ?? [])]; }
   get prompt() { return this.props.prompt; }
   get creditCost() { return this.props.creditCost; }
   get status() { return this.props.status; }

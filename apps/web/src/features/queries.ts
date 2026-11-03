@@ -13,6 +13,9 @@ export const keys = {
   referral: ["referral"] as const,
   job: (id: string) => ["job", id] as const,
   jobs: ["jobs"] as const,
+  feed: ["feed"] as const,
+  myPosts: ["myPosts"] as const,
+  post: (id: string) => ["post", id] as const,
   payment: (id: string) => ["payment", id] as const,
 };
 
@@ -67,4 +70,27 @@ export function usePayment(id: string | null) {
     enabled: id !== null,
     refetchInterval: (q) => (q.state.data && q.state.data.status !== "PENDING" ? false : 3000),
   });
+}
+
+export function useFeed() {
+  const api = useApi();
+  return useInfiniteQuery({
+    queryKey: keys.feed,
+    queryFn: ({ pageParam }) => api.feed(pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (last) => last.nextCursor ?? undefined,
+  });
+}
+export function useMyPosts() {
+  const api = useApi();
+  return useInfiniteQuery({
+    queryKey: keys.myPosts,
+    queryFn: ({ pageParam }) => api.myPosts(pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (last) => last.nextCursor ?? undefined,
+  });
+}
+export function usePost(id: string) {
+  const api = useApi();
+  return useQuery({ queryKey: keys.post(id), queryFn: () => api.getPost(id) });
 }
