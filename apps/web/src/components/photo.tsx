@@ -123,15 +123,15 @@ export function ResultActions({ url }: { url: string }) {
       setBusy(null);
     }
   }
-  const btn = "inline-flex min-h-11 items-center justify-center rounded-pill px-xl font-semibold shadow-glow disabled:opacity-60";
+  const btn = "inline-flex min-h-11 items-center justify-center rounded-sm px-xl font-semibold transition disabled:opacity-60";
   return (
     <div>
       <div className="flex flex-wrap gap-sm">
-        <button type="button" disabled={busy !== null} onClick={() => run("save")} className={btn + " bg-signature text-white"}>
+        <button type="button" disabled={busy !== null} onClick={() => run("save")} className={btn + " bg-ink text-bg hover:bg-ink/85"}>
           {busy === "save" ? "Préparation…" : "Télécharger en HD"}
         </button>
         {canShare && (
-          <button type="button" disabled={busy !== null} onClick={() => run("share")} className={btn + " border border-line bg-bg-surface text-ink"}>
+          <button type="button" disabled={busy !== null} onClick={() => run("share")} className={btn + " border border-ink/70 text-ink hover:bg-bg-alt"}>
             {busy === "share" ? "Préparation…" : "Partager (WhatsApp…)"}
           </button>
         )}

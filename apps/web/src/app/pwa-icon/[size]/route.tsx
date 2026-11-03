@@ -1,7 +1,8 @@
 import { ImageResponse } from "next/og";
+import { BRAND } from "@/lib/brand";
 
 // Icônes de l'app installable, générées à la demande puis mises en cache (pas de fichier binaire à maintenir).
-// « maskable-512 » : fond plein et étoile réduite, pour que le découpage rond/arrondi d'Android ne la rogne pas.
+// « maskable-512 » : fond plein et logo réduit, pour que le découpage rond/arrondi d'Android ne le rogne pas.
 const VARIANTS = {
   "180": { px: 180, maskable: false },
   "192": { px: 192, maskable: false },
@@ -14,13 +15,12 @@ export function generateStaticParams() {
   return Object.keys(VARIANTS).map((size) => ({ size }));
 }
 
-const STAR = "M50 6 C54 34 66 46 94 50 C66 54 54 66 50 94 C46 66 34 54 6 50 C34 46 46 34 50 6 Z";
 
 export async function GET(_req: Request, { params }: { params: Promise<{ size: string }> }) {
   const { size } = await params;
   const v = VARIANTS[size as keyof typeof VARIANTS];
   if (!v) return new Response("Not found", { status: 404 });
-  const glyph = Math.round(v.px * (v.maskable ? 0.52 : 0.62));
+  const glyph = Math.round(v.px * (v.maskable ? 0.62 : 0.78));
   return new ImageResponse(
     (
       <div
@@ -30,12 +30,16 @@ export async function GET(_req: Request, { params }: { params: Promise<{ size: s
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          background: "linear-gradient(135deg, #6C4CE0 0%, #FF6B6B 100%)",
+          background: BRAND.tile,
           borderRadius: v.maskable ? 0 : Math.round(v.px * 0.22),
         }}
       >
         <svg width={glyph} height={glyph} viewBox="0 0 100 100">
-          <path d={STAR} fill="#FFFFFF" />
+          <g fill="none" stroke={BRAND.paper} strokeWidth={BRAND.stroke} strokeLinecap="round" strokeLinejoin="round">
+            <path d={BRAND.hook} />
+            <path d={BRAND.hanger} />
+          </g>
+          <circle cx={BRAND.dot.cx} cy={BRAND.dot.cy} r={BRAND.dot.r} fill={BRAND.terracotta} />
         </svg>
       </div>
     ),

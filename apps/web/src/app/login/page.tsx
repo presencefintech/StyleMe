@@ -7,13 +7,12 @@ import { REFERRAL } from "@styleme/shared";
 import { Logo } from "@/components/logo";
 import { Button, Card, ErrorNote, Field } from "@/components/ui";
 import { errorMessage } from "@/lib/api";
-import { gradientCss } from "@/lib/style-palettes";
 import { useApi, useAuth } from "@/lib/providers";
 
 const BENEFITS = [
-  { glyph: "✦", title: "Le bon décor pour chaque occasion", text: "Mariage, diplôme, anniversaire… votre portrait est détouré et placé dans un décor soigné." },
-  { glyph: "✎", title: "Retouchez avec une simple phrase", text: "« Enlève l'objet au fond », « change ma chemise en noir » : vous décrivez, l'IA retouche." },
-  { glyph: "◈", title: "Vos photos restent privées", text: "Stockage privé, accès par liens temporaires. Vous n'êtes débité que si le résultat est livré." },
+  { n: "01", title: "Le bon décor pour chaque occasion", text: "Mariage, diplôme, anniversaire… votre portrait est détouré et placé dans un décor soigné." },
+  { n: "02", title: "Retouchez avec une simple phrase", text: "« Enlève l'objet au fond », « change ma chemise en noir » : vous décrivez, l'IA retouche." },
+  { n: "03", title: "Vos photos restent privées", text: "Stockage privé, accès par liens temporaires. Vous n'êtes débité que si le résultat est livré." },
 ];
 
 export default function LoginPage() {
@@ -54,16 +53,13 @@ export default function LoginPage() {
 
   const isLogin = mode === "login";
   return (
-    <main className="relative min-h-screen overflow-hidden">
-      {/* halos décoratifs */}
-      <div aria-hidden className="pointer-events-none absolute -left-32 -top-32 h-96 w-96 rounded-pill bg-primary/20 blur-3xl" />
-      <div aria-hidden className="pointer-events-none absolute -bottom-32 right-0 h-96 w-96 rounded-pill bg-coral/20 blur-3xl" />
+    <main className="relative min-h-screen">
 
       <div className="relative mx-auto grid min-h-screen max-w-6xl items-center gap-3xl px-lg py-2xl lg:grid-cols-[1.1fr_0.9fr]">
         <section>
           <Logo />
           <h1 className="mt-3xl font-display text-hero font-semibold text-ink">
-            Chaque occasion mérite sa <em className="bg-signature bg-clip-text not-italic text-transparent">plus belle photo</em>.
+            Chaque occasion mérite sa <em className="text-primary">plus belle photo</em>.
           </h1>
           <p className="mt-lg max-w-lg text-h2 text-ink-muted">
             Envoyez un portrait. StyleMe le détoure, le place dans le décor de l'occasion, et vous laisse le retoucher en une phrase.
@@ -72,7 +68,7 @@ export default function LoginPage() {
           <ul className="mt-2xl space-y-lg">
             {BENEFITS.map((b) => (
               <li key={b.title} className="flex gap-md">
-                <span aria-hidden className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-primary/10 text-h2 text-primary">{b.glyph}</span>
+                <span aria-hidden className="w-8 shrink-0 font-display text-h2 font-semibold text-primary">{b.n}</span>
                 <div>
                   <p className="font-semibold text-ink">{b.title}</p>
                   <p className="text-caption text-ink-muted">{b.text}</p>
@@ -81,11 +77,6 @@ export default function LoginPage() {
             ))}
           </ul>
 
-          <div aria-hidden className="mt-2xl hidden gap-sm sm:flex">
-            {["mariage", "anniversaire", "diplome", "saint-valentin", "fetes"].map((id) => (
-              <span key={id} className="h-14 w-14 rounded-md shadow-card" style={{ backgroundImage: gradientCss(id) }} />
-            ))}
-          </div>
         </section>
 
         <Card className="w-full max-w-md justify-self-center lg:justify-self-end">

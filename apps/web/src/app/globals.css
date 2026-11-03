@@ -2,50 +2,35 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Thème clair « studio » (défaut). Valeurs RGB sans virgule pour supporter l'opacité Tailwind (bg-primary/20). */
+/* Thème « Atelier » : papier chaud, encre, terre cuite. Valeurs RGB sans virgule (opacité Tailwind : bg-primary/20). */
 :root {
-  --bg: 250 247 242;
-  --surface: 255 255 255;
-  --alt: 243 239 232;
-  --ink: 27 26 46;
-  --muted: 107 106 128;
-  --line: 229 224 215;
-  --primary: 108 76 224;
-  --primary-dark: 75 50 168;
-  --accent: 224 161 0;
-  --accent-ink: 138 90 0;
-  --coral: 255 107 107;
-  --success: 22 163 74;
-  --warning: 217 119 6;
-  --danger: 220 38 38;
-  --shadow: 27 26 46;
+  --bg: 244 238 228;        /* papier */
+  --surface: 250 246 238;   /* papier clair (champs, cartes) */
+  --alt: 239 231 218;       /* barre latérale, zones de repos */
+  --ink: 30 27 22;
+  --muted: 107 100 88;
+  --line: 216 204 185;
+  --primary: 180 71 43;     /* terre cuite */
+  --primary-dark: 140 52 30;
+  --accent: 36 73 59;       /* vert profond */
+  --accent-ink: 36 73 59;
+  --coral: 217 119 87;
+  --success: 36 120 80;
+  --warning: 160 98 14;
+  --danger: 168 32 32;
+  --shadow: 30 27 22;
   color-scheme: light;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: 14 16 32;
-    --surface: 26 29 51;
-    --alt: 36 40 69;
-    --ink: 245 246 251;
-    --muted: 167 173 201;
-    --line: 46 51 80;
-    --accent: 242 183 5;
-    --accent-ink: 242 183 5;
-    --success: 47 191 113;
-    --warning: 242 183 5;
-    --danger: 255 84 112;
-    --shadow: 0 0 0;
-    color-scheme: dark;
-  }
-}
+/* Thème clair uniquement : le style « Atelier » est pensé sur papier. Pas de mode sombre automatique. */
 
 html { scroll-behavior: smooth; }
 body {
   @apply bg-bg font-sans text-body text-ink antialiased;
   min-height: 100vh;
 }
-::selection { background: rgb(var(--primary) / 0.3); }
+::selection { background: rgb(var(--primary) / 0.25); }
+h1, h2, h3 { font-feature-settings: "liga", "kern"; text-wrap: balance; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }

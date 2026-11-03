@@ -1,12 +1,12 @@
 import type { Metadata, Viewport } from "next";
-import { Fraunces, Inter } from "next/font/google";
+import { Inter, Playfair_Display } from "next/font/google";
 import type { ReactNode } from "react";
 import { RegisterServiceWorker } from "@/components/pwa";
 import { Providers } from "@/lib/providers";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
-const display = Fraunces({ subsets: ["latin"], variable: "--font-display", axes: ["opsz"] });
+const display = Playfair_Display({ subsets: ["latin"], variable: "--font-display", weight: ["500", "600", "700"] });
 
 export const metadata: Metadata = {
   title: "StyleMe",
@@ -17,10 +17,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#6C4CE0" },
-    { media: "(prefers-color-scheme: dark)", color: "#0E1020" },
-  ],
+  themeColor: "#F4EEE4",
   viewportFit: "cover",
 };
 

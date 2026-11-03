@@ -99,7 +99,7 @@ function ContinueEdit({ jobId, resultUrl }: { jobId: string; resultUrl: string }
       </div>
       <ErrorNote message={error} />
       {needCredits && <Link href="/credits" className="text-accent-ink underline">Acheter des crédits</Link>}
-      <Button onClick={submit} loading={busy} disabled={!prompt.trim()} className="w-full">Appliquer ({cost} ✦)</Button>
+      <Button onClick={submit} loading={busy} disabled={!prompt.trim()} className="w-full">Appliquer · {cost} crédits</Button>
     </Card>
   );
 }
@@ -154,7 +154,7 @@ export default function JobPage({ params }: { params: Promise<{ id: string }> })
                 <p className="font-semibold">Un autre objet à enlever ?</p>
                 <p className="text-caption text-ink-muted">Continuez sur cette version de la photo.</p>
               </div>
-              <Link href={`/erase?job=${id}`} className="inline-flex min-h-12 items-center rounded-pill bg-signature px-xl font-semibold text-white shadow-glow">Gommer un autre objet</Link>
+              <Link href={`/erase?job=${id}`} className="inline-flex min-h-12 items-center justify-center rounded-sm bg-ink px-xl font-semibold text-bg transition hover:bg-ink/85">Gommer un autre objet</Link>
             </Card>
           )}
         </>

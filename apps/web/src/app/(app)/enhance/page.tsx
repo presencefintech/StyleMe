@@ -24,7 +24,7 @@ function Step({ n, title, children }: { n: number; title: string; children: Reac
   return (
     <section>
       <h2 className="mb-md flex items-center gap-sm text-h2 font-semibold">
-        <span aria-hidden className="grid h-7 w-7 place-items-center rounded-pill bg-signature text-caption font-bold text-white">{n}</span>
+        <span aria-hidden className="font-display text-h2 font-semibold text-primary">{String(n).padStart(2, "0")}</span>
         {title}
       </h2>
       {children}
@@ -189,7 +189,7 @@ export default function EnhancePage() {
       {needCredits && <Link href="/credits" className="text-accent-ink underline">Acheter des crédits</Link>}
 
       <Button onClick={start} disabled={!file || !styleId || empty} loading={busy} className="w-full">
-        {step === "uploading" ? "Envoi de la photo…" : step === "creating" ? "Lancement…" : isCleanup ? "Nettoyer ma photo (1 ✦)" : "Sublimer ma photo (1 ✦)"}
+        {step === "uploading" ? "Envoi de la photo…" : step === "creating" ? "Lancement…" : isCleanup ? "Nettoyer ma photo · 1 crédit" : "Sublimer ma photo · 1 crédit"}
       </Button>
       <p className="text-center text-tiny text-ink-muted">
         Vos photos restent privées. Un crédit n'est débité que si le résultat vous est livré.

@@ -295,7 +295,7 @@ function EraseTool() {
             <p role="status" className="px-xs text-caption text-ink-muted">{hint}</p>
             <div className="flex gap-sm">
               <Button onClick={erase} disabled={!locked || !selection || selecting || busy || lacking} loading={step === "erasing"} className="flex-1">
-                Enlever cet objet ({COST} ✦)
+                Enlever cet objet · {COST} crédit{COST > 1 ? "s" : ""}
               </Button>
               {locked && <Button variant="secondary" onClick={unlock} disabled={busy} className="px-lg">Désélectionner</Button>}
               <Button variant="secondary" onClick={reset} disabled={busy} className="px-lg">Changer</Button>

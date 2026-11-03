@@ -93,7 +93,7 @@ export default function EditPage() {
       {needCredits && <Link href="/credits" className="text-accent-ink underline">Acheter des crédits</Link>}
 
       <Button onClick={start} disabled={!file || !prompt.trim() || lacking} loading={busy} className="w-full">
-        {step === "uploading" ? "Envoi de la photo…" : step === "creating" ? "Lancement…" : `Retoucher ma photo (${COST} ✦)`}
+        {step === "uploading" ? "Envoi de la photo…" : step === "creating" ? "Lancement…" : `Retoucher ma photo · ${COST} crédits`}
       </Button>
       <p className="text-center text-tiny text-ink-muted">
         Vos photos restent privées. Les crédits ne sont débités que si le résultat vous est livré.

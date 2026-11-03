@@ -2,6 +2,7 @@
 
 import type { JobStatus, Operator } from "@styleme/shared";
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from "react";
+import { Icon } from "@/components/icons";
 import { gradientCss } from "@/lib/style-palettes";
 
 export const cx = (...c: (string | false | undefined | null)[]) => c.filter(Boolean).join(" ");
@@ -12,8 +13,8 @@ const FOCUS = "focus-visible:outline focus-visible:outline-2 focus-visible:outli
 
 type Variant = "primary" | "secondary" | "ghost";
 const VARIANTS: Record<Variant, string> = {
-  primary: "bg-signature text-white shadow-glow hover:brightness-110 active:scale-[0.98]",
-  secondary: "border border-line bg-bg-surface text-ink hover:border-primary/50 hover:bg-bg-alt",
+  primary: "bg-ink text-bg hover:bg-ink/85 active:translate-y-px",
+  secondary: "border border-ink/70 bg-transparent text-ink hover:bg-bg-alt",
   ghost: "bg-transparent text-ink-muted hover:text-ink",
 };
 
@@ -31,9 +32,9 @@ export function Button({
       disabled={disabled || loading}
       aria-busy={loading}
       className={cx(
-        "inline-flex min-h-12 items-center justify-center gap-sm rounded-pill px-xl text-body font-semibold transition duration-150",
+        "inline-flex min-h-12 items-center justify-center gap-sm rounded-sm px-xl text-body font-semibold transition duration-150",
         FOCUS,
-        "disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none disabled:active:scale-100",
+        "disabled:cursor-not-allowed disabled:opacity-50 disabled:active:translate-y-0",
         VARIANTS[variant],
         className,
       )}
@@ -66,8 +67,8 @@ export function Screen({
 }) {
   return (
     <section className={cx("mx-auto w-full max-w-3xl px-lg", compact ? "pb-xl pt-lg" : "pb-3xl pt-2xl sm:pt-3xl")}>
-      {eyebrow && !compact && <p className="mb-sm text-caption font-semibold uppercase tracking-widest text-primary">{eyebrow}</p>}
-      <h1 className={cx("font-display font-semibold text-ink", compact ? "text-h1" : "text-display sm:text-[2.5rem] sm:leading-[1.1]")}>{title}</h1>
+      {eyebrow && !compact && <p className="mb-sm text-caption font-semibold uppercase tracking-[0.18em] text-primary">{eyebrow}</p>}
+      <h1 className={cx("font-display font-semibold text-ink", compact ? "text-h1" : "text-display sm:text-[3rem] sm:leading-[1.05]")}>{title}</h1>
       {subtitle && !compact && <p className="mt-md max-w-xl text-body text-ink-muted">{subtitle}</p>}
       <div className={cx("space-y-xl", compact ? "mt-lg space-y-md" : "mt-2xl")}>{children}</div>
     </section>
@@ -78,8 +79,7 @@ export function Screen({
 
 export function CreditBadge({ value }: { value: number | undefined }) {
   return (
-    <span className="inline-flex items-center gap-xs rounded-pill border border-accent/40 bg-accent/10 px-md py-xs text-caption font-semibold text-accent-ink">
-      <span aria-hidden>✦</span>
+    <span className="inline-flex items-center whitespace-nowrap rounded-sm border border-ink/70 px-md py-xs text-caption font-medium text-ink">
       {value === undefined ? "…" : `${value} crédit${value > 1 ? "s" : ""}`}
     </span>
   );
@@ -96,7 +96,7 @@ const PILL: Record<JobStatus, { label: string; cls: string }> = {
 };
 export function JobStatusPill({ status }: { status: JobStatus }) {
   const p = PILL[status];
-  return <span className={cx("inline-flex rounded-pill px-md py-xs text-caption font-semibold", p.cls)}>{p.label}</span>;
+  return <span className={cx("inline-flex rounded-sm px-md py-xs text-caption font-semibold", p.cls)}>{p.label}</span>;
 }
 
 // --- StyleCard : tuile d'occasion (aperçu du décor) ---------------------------------------------------------
@@ -130,7 +130,7 @@ export function StyleCard({
       {previewUrl ? (
         <img src={previewUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
       ) : (
-        <div aria-hidden className="absolute inset-0 bg-signature" style={{ backgroundImage: gradientCss(id) }}>
+        <div aria-hidden className="absolute inset-0" style={{ backgroundImage: gradientCss(id) }}>
           {/* silhouette : montre où se place le sujet sur le décor */}
           <div className="absolute inset-x-0 bottom-0 flex flex-col items-center">
             <span className="h-9 w-9 rounded-pill bg-black/15" />
@@ -140,10 +140,10 @@ export function StyleCard({
       )}
       <span className="absolute inset-x-0 bottom-0 flex items-end justify-between bg-gradient-to-t from-black/60 to-transparent p-md pt-2xl">
         <span className="text-body font-semibold text-white">{name}</span>
-        <span className="text-caption text-white/80">{creditCost} ✦</span>
+        <span className="text-caption text-white/80">{creditCost} cr.</span>
       </span>
       {selected && (
-        <span aria-hidden className="absolute right-sm top-sm grid h-6 w-6 place-items-center rounded-pill bg-primary text-tiny font-bold text-white">✓</span>
+        <span aria-hidden className="absolute right-sm top-sm grid h-6 w-6 place-items-center rounded-sm bg-primary text-white"><Icon name="check" size={14} /></span>
       )}
     </button>
   );
@@ -178,9 +178,9 @@ export function CreditPackCard({
       )}
     >
       {popular && (
-        <span className="absolute -top-3 left-lg rounded-pill bg-accent px-md py-0.5 text-tiny font-bold uppercase tracking-wide text-bg">Populaire</span>
+        <span className="absolute -top-3 left-lg rounded-sm bg-accent px-md py-0.5 text-tiny font-bold uppercase tracking-wide text-bg">Populaire</span>
       )}
-      <div className="font-display text-display font-semibold text-ink">{credits}<span className="ml-xs text-h2 text-accent">✦</span></div>
+      <div className="font-display text-display font-semibold text-ink">{credits}<span className="ml-xs text-caption font-sans font-medium text-ink-muted">crédits</span></div>
       <div className="mt-xs text-body font-semibold text-ink">{price} {currency}</div>
       <div className="text-caption text-ink-muted">{(price / credits).toFixed(2)} {currency} / crédit</div>
     </button>
@@ -246,7 +246,7 @@ export function Chip({ children, ...rest }: ButtonHTMLAttributes<HTMLButtonEleme
       type="button"
       {...rest}
       className={cx(
-        "rounded-pill border border-line bg-bg-surface px-md py-xs text-caption text-ink-muted transition hover:border-primary/50 hover:text-ink disabled:opacity-50",
+        "rounded-sm border border-line bg-bg-surface px-md py-xs text-caption text-ink-muted transition hover:border-primary/50 hover:text-ink disabled:opacity-50",
         FOCUS,
       )}
     >

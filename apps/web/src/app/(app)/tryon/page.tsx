@@ -111,7 +111,7 @@ export default function TryOnPage() {
       {needCredits && <Link href="/credits" className="text-accent-ink underline">Acheter des crédits</Link>}
 
       <Button onClick={start} disabled={!file || !garmentId || lacking} loading={busy} className="w-full">
-        {step === "uploading" ? "Envoi de la photo…" : step === "creating" ? "Lancement…" : `Essayer cette tenue (${COST} ✦)`}
+        {step === "uploading" ? "Envoi de la photo…" : step === "creating" ? "Lancement…" : `Essayer cette tenue · ${COST} crédits`}
       </Button>
       <p className="text-center text-tiny text-ink-muted">
         Le rendu est une simulation : les motifs très détaillés peuvent être simplifiés. Les crédits ne sont débités que si le résultat vous est livré.
