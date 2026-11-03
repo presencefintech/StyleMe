@@ -1,6 +1,6 @@
 /* Service worker StyleMe : rend l'app installable et affiche une page de secours hors ligne.
    Volontairement minimal : jamais de cache pour l'API, les photos ou les URLs signées (données privées, durée de vie courte). */
-const VERSION = "styleme-v1";
+const VERSION = "styleme-v2";
 const OFFLINE_URL = "/offline";
 
 self.addEventListener("install", (event) => {

@@ -13,7 +13,7 @@ export const metadata: Metadata = {
   description: "Une belle photo pour chaque occasion.",
   applicationName: "StyleMe",
   appleWebApp: { capable: true, title: "StyleMe", statusBarStyle: "default" },
-  icons: { icon: [{ url: "/pwa-icon/192", sizes: "192x192", type: "image/png" }], apple: [{ url: "/pwa-icon/180", sizes: "180x180", type: "image/png" }] },
+  icons: { icon: [{ url: "/pwa-icon/192?v=2", sizes: "192x192", type: "image/png" }], apple: [{ url: "/pwa-icon/180?v=2", sizes: "180x180", type: "image/png" }] },
 };
 
 export const viewport: Viewport = {
