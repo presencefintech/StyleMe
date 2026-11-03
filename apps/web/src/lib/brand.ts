@@ -14,6 +14,8 @@ export const BRAND = {
   /** Corps du cintre. */
   hanger: "M50 40 L21 63 A4 4 0 0 0 23.5 70.5 H76.5 A4 4 0 0 0 79 63 L50 40 Z",
   /** Point de couleur (épingle de couturier). */
-  dot: { cx: 80, cy: 22, r: 7 },
+  dot: { cx: 80, cy: 22, r: 8 },
   stroke: 7,
+  /** Centre le dessin (cintre + point) dans le carré et l'agrandit un peu : sans cela il restait décalé en haut à droite. */
+  fit: "translate(50 50) scale(1.1) translate(-52.5 -44)",
 } as const;

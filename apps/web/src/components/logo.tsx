@@ -6,11 +6,13 @@ export function LogoMark({ size = 30, className }: { size?: number; className?: 
   return (
     <svg width={size} height={size} viewBox="0 0 100 100" aria-hidden className={className}>
       <rect width="100" height="100" className="fill-ink" />
-      <g fill="none" strokeWidth={BRAND.stroke} strokeLinecap="round" strokeLinejoin="round" className="stroke-bg">
-        <path d={BRAND.hook} />
-        <path d={BRAND.hanger} />
+      <g transform={BRAND.fit}>
+        <g fill="none" strokeWidth={BRAND.stroke} strokeLinecap="round" strokeLinejoin="round" className="stroke-bg">
+          <path d={BRAND.hook} />
+          <path d={BRAND.hanger} />
+        </g>
+        <circle cx={BRAND.dot.cx} cy={BRAND.dot.cy} r={BRAND.dot.r} className="fill-accent" />
       </g>
-      <circle cx={BRAND.dot.cx} cy={BRAND.dot.cy} r={BRAND.dot.r + 1} className="fill-accent" />
     </svg>
   );
 }

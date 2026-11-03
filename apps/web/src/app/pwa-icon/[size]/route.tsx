@@ -20,7 +20,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ size: s
   const { size } = await params;
   const v = VARIANTS[size as keyof typeof VARIANTS];
   if (!v) return new Response("Not found", { status: 404 });
-  const glyph = Math.round(v.px * (v.maskable ? 0.62 : 0.78));
+  const glyph = Math.round(v.px * (v.maskable ? 0.66 : 0.8));
   return new ImageResponse(
     (
       <div
@@ -35,11 +35,13 @@ export async function GET(_req: Request, { params }: { params: Promise<{ size: s
         }}
       >
         <svg width={glyph} height={glyph} viewBox="0 0 100 100">
-          <g fill="none" stroke={BRAND.paper} strokeWidth={BRAND.stroke} strokeLinecap="round" strokeLinejoin="round">
-            <path d={BRAND.hook} />
-            <path d={BRAND.hanger} />
+          <g transform={BRAND.fit}>
+            <g fill="none" stroke={BRAND.paper} strokeWidth={BRAND.stroke} strokeLinecap="round" strokeLinejoin="round">
+              <path d={BRAND.hook} />
+              <path d={BRAND.hanger} />
+            </g>
+            <circle cx={BRAND.dot.cx} cy={BRAND.dot.cy} r={BRAND.dot.r} fill={BRAND.accent} />
           </g>
-          <circle cx={BRAND.dot.cx} cy={BRAND.dot.cy} r={BRAND.dot.r} fill={BRAND.accent} />
         </svg>
       </div>
     ),
